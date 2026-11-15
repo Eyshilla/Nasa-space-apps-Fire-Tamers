@@ -1,0 +1,8 @@
+{
+  "name": "PSI-159 · Laboratório de Chamas Frias",
+  "description": "Dashboard educativo interativo do experimento PSI-159 (Cool Flames Investigation with Gases) da NASA com simulador de câmara em microgravidade, gráficos de inflamabilidade e tutor inteligente baseado nos dados experimentais.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
