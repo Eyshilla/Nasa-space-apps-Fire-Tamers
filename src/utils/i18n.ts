@@ -3,6 +3,8 @@ import type { AppLanguage } from '../types/psi159';
 export interface UiStrings {
   appTitle: string;
   appSubtitle: string;
+  appDescription: string;
+  footerNotice: string;
   logoAlt: string;
   tabs: {
     overview: string;
@@ -218,12 +220,18 @@ export interface UiStrings {
     viewTest: string;
     quizTitle: (n: number) => string;
     closeQuiz: string;
+    errorFallback: string;
+    quizErrorFallback: string;
   };
 }
 
 const PT: UiStrings = {
-  appTitle: 'PSI-159 · Laboratório de Chamas Frias',
-  appSubtitle: 'CFI-G / ACME · Microgravidade na ISS & Base Lunar',
+  appTitle: 'Fire Tamers',
+  appSubtitle: 'Dados NASA PSI-159 · Chamas frias em microgravidade',
+  appDescription:
+    'Fire Tamers — Projeto independente com dados públicos do experimento NASA PSI-159 (chamas frias em microgravidade), visualizações 2D/3D e Mentor Fire Tamers.',
+  footerNotice:
+    'Projeto independente criado para o desafio NASA. Dados: NASA Physical Science Informatics (PSI-159).',
   logoAlt: 'Logotipo Fire Tamers e ACME · Voltar para Visão Geral',
   tabs: {
     overview: 'Visão Geral',
@@ -417,7 +425,7 @@ const PT: UiStrings = {
   drawer: {
     close: 'Fechar detalhe',
     day: 'Dia',
-    askAiBtn: 'Perguntar à Superinteligência sobre este ensaio',
+    askAiBtn: 'Perguntar ao Mentor Fire Tamers sobre este ensaio',
     openSimBtn: 'Abrir no Simulador 3D (0g vs 1g)',
     atmSection: 'Parâmetros Atmosféricos e de Fluxo',
     thermalSection: 'Resultados Térmicos e Combustão',
@@ -425,15 +433,15 @@ const PT: UiStrings = {
     commentTitle: 'Comentário original da NASA',
   },
   ai: {
-    title: 'Superinteligência NASA',
-    subtitle: (n) => `Baseada 100% nos ${n} ensaios reais`,
-    launcherSub: 'Mentora PSI-159 · Dúvidas & Quiz',
+    title: 'Mentor Fire Tamers',
+    subtitle: (n) => `Dados públicos NASA PSI-159 · ${n} ensaios`,
+    launcherSub: 'Mentor PSI-159 · Dúvidas & Quiz',
     simple: 'Explicar simples',
     tech: 'Explicar técnico',
     quizBtn: 'Modo Quiz rápido',
     quizLoading: 'Gerando Quiz...',
     welcome: (n) =>
-      `Olá! Eu leio exatamente os filtros e gráficos que você vê agora (${n} ensaios). Pergunte qualquer coisa ou faça o Quiz rápido!`,
+      `Olá! Sou o Mentor Fire Tamers (projeto independente com dados públicos do experimento NASA PSI-159, não oficial da NASA). Vejo seus filtros atuais (${n} ensaios) — pergunte qualquer coisa ou faça o Quiz rápido!`,
     suggestionsTitle: 'Sugestões para esta tela',
     placeholder: 'Pergunte sobre O₂, chamas frias, Test ID...',
     copy: 'Copiar',
@@ -441,12 +449,18 @@ const PT: UiStrings = {
     viewTest: 'Ver',
     quizTitle: (n) => `Modo Quiz Rápido (${n} questões)`,
     closeQuiz: 'Fechar quiz',
+    errorFallback: 'Não foi possível consultar o Mentor Fire Tamers.',
+    quizErrorFallback: 'Falha ao gerar o quiz rápido.',
   },
 };
 
 const EN: UiStrings = {
-  appTitle: 'PSI-159 · Cool Flames Lab',
-  appSubtitle: 'CFI-G / ACME · ISS Microgravity & Lunar Base Safety',
+  appTitle: 'Fire Tamers',
+  appSubtitle: 'NASA PSI-159 data · Cool flames in microgravity',
+  appDescription:
+    'Fire Tamers — Independent project using public NASA PSI-159 microgravity cool flames data, 2D/3D visualizations, and the Fire Tamers Mentor.',
+  footerNotice:
+    'Independent project created for the NASA challenge. Data: NASA Physical Science Informatics (PSI-159).',
   logoAlt: 'Fire Tamers and ACME logo · Back to Overview',
   tabs: {
     overview: 'Overview',
@@ -640,7 +654,7 @@ const EN: UiStrings = {
   drawer: {
     close: 'Close details',
     day: 'Day',
-    askAiBtn: 'Ask NASA Superintelligence about this test',
+    askAiBtn: 'Ask Fire Tamers Mentor about this test',
     openSimBtn: 'Open in 3D Simulator (0g vs 1g)',
     atmSection: 'Atmosphere & Flow Parameters',
     thermalSection: 'Thermal & Combustion Results',
@@ -648,15 +662,15 @@ const EN: UiStrings = {
     commentTitle: 'Original NASA comment',
   },
   ai: {
-    title: 'NASA Superintelligence',
-    subtitle: (n) => `Grounded 100% in ${n} real tests`,
+    title: 'Fire Tamers Mentor',
+    subtitle: (n) => `Public NASA PSI-159 data · ${n} tests`,
     launcherSub: 'PSI-159 Mentor · Q&A & Quiz',
     simple: 'Simple mode',
     tech: 'Technical mode',
     quizBtn: 'Quick Quiz Mode',
     quizLoading: 'Generating Quiz...',
     welcome: (n) =>
-      `Hello! I see your active filters and charts (${n} tests). Ask anything or start the Quick Quiz!`,
+      `Hello! I am the Fire Tamers Mentor (an independent project using public NASA PSI-159 experiment data, not an official NASA project). I see your active filters (${n} tests) — ask anything or start the Quick Quiz!`,
     suggestionsTitle: 'Suggested questions',
     placeholder: 'Ask about O₂, cool flames, Test ID...',
     copy: 'Copy',
@@ -664,12 +678,18 @@ const EN: UiStrings = {
     viewTest: 'Inspect',
     quizTitle: (n) => `Quick Quiz Mode (${n} questions)`,
     closeQuiz: 'Close quiz',
+    errorFallback: 'Unable to reach the Fire Tamers Mentor.',
+    quizErrorFallback: 'Failed to generate the quick quiz.',
   },
 };
 
 const ES: UiStrings = {
-  appTitle: 'PSI-159 · Laboratorio de Llamas Frías',
-  appSubtitle: 'CFI-G / ACME · Microgravedad en ISS y Base Lunar',
+  appTitle: 'Fire Tamers',
+  appSubtitle: 'Datos NASA PSI-159 · Llamas frías en microgravedad',
+  appDescription:
+    'Fire Tamers — Proyecto independiente con datos públicos del experimento NASA PSI-159 (llamas frías en microgravedad), visualizaciones 2D/3D y Mentor Fire Tamers.',
+  footerNotice:
+    'Proyecto independiente creado para el desafío NASA. Datos: NASA Physical Science Informatics (PSI-159).',
   logoAlt: 'Logotipo Fire Tamers y ACME · Volver a Resumen',
   tabs: {
     overview: 'Resumen',
@@ -863,7 +883,7 @@ const ES: UiStrings = {
   drawer: {
     close: 'Cerrar detalle',
     day: 'Día',
-    askAiBtn: 'Preguntar a la Superinteligencia sobre este ensayo',
+    askAiBtn: 'Preguntar al Mentor Fire Tamers sobre este ensayo',
     openSimBtn: 'Abrir en Simulador 3D (0g vs 1g)',
     atmSection: 'Parámetros Atmosféricos y Flujo',
     thermalSection: 'Resultados Térmicos y Combustión',
@@ -871,15 +891,15 @@ const ES: UiStrings = {
     commentTitle: 'Comentario original de NASA',
   },
   ai: {
-    title: 'Superinteligencia NASA',
-    subtitle: (n) => `Basada 100% en ${n} ensayos reales`,
-    launcherSub: 'Mentora PSI-159 · Dudas y Quiz',
+    title: 'Mentor Fire Tamers',
+    subtitle: (n) => `Datos públicos NASA PSI-159 · ${n} ensayos`,
+    launcherSub: 'Mentor PSI-159 · Dudas y Quiz',
     simple: 'Modo simple',
     tech: 'Modo técnico',
     quizBtn: 'Modo Quiz rápido',
     quizLoading: 'Generando Quiz...',
     welcome: (n) =>
-      `¡Hola! Veo exactamente tus filtros y gráficos actuales (${n} ensayos). ¡Pregunta lo que quieras o inicia el Quiz rápido!`,
+      `¡Hola! Soy el Mentor Fire Tamers (proyecto independiente que usa datos públicos del experimento NASA PSI-159, no oficial de la NASA). Veo tus filtros actuales (${n} ensayos) — ¡pregunta lo que quieras o inicia el Quiz rápido!`,
     suggestionsTitle: 'Sugerencias para esta vista',
     placeholder: 'Pregunta sobre O₂, llamas frías, Test ID...',
     copy: 'Copiar',
@@ -887,6 +907,8 @@ const ES: UiStrings = {
     viewTest: 'Ver',
     quizTitle: (n) => `Modo Quiz Rápido (${n} preguntas)`,
     closeQuiz: 'Cerrar quiz',
+    errorFallback: 'No fue posible consultar al Mentor Fire Tamers.',
+    quizErrorFallback: 'Error al generar el quiz rápido.',
   },
 };
 

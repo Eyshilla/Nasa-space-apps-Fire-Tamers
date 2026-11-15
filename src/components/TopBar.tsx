@@ -63,13 +63,13 @@ export const TopBar: React.FC = () => {
           <div className="hidden min-w-0 min-[560px]:block">
             <h1
               title={t.appTitle}
-              className="truncate font-bold text-slate-100"
+              className="truncate text-base font-bold leading-tight text-slate-100 sm:text-lg"
             >
               {t.appTitle}
             </h1>
             <p
               title={t.appSubtitle}
-              className="hidden truncate text-[10px] text-[#B4C3D8] lg:block"
+              className="truncate text-[10px] leading-tight text-[#B4C3D8]"
             >
               {t.appSubtitle}
             </p>

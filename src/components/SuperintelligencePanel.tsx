@@ -394,7 +394,7 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
         const msg =
           err instanceof Error
             ? err.message
-            : 'Não foi possível consultar a Superinteligência NASA.';
+            : tStr.ai.errorFallback;
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
@@ -415,6 +415,7 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
       filtersSummary,
       kpisSummary,
       lang,
+      tStr.ai.errorFallback,
     ]
   );
 
@@ -443,12 +444,19 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
       setQuizQuestions(data.questions);
     } catch (err: unknown) {
       setQuizError(
-        err instanceof Error ? err.message : 'Falha ao gerar o quiz rápido.'
+        err instanceof Error ? err.message : tStr.ai.quizErrorFallback
       );
     } finally {
       setQuizLoading(false);
     }
-  }, [quizLoading, streaming, filtersSummary, kpisSummary, filteredTests]);
+  }, [
+    quizLoading,
+    streaming,
+    filtersSummary,
+    kpisSummary,
+    filteredTests,
+    tStr.ai.quizErrorFallback,
+  ]);
 
   useEffect(() => {
     if (

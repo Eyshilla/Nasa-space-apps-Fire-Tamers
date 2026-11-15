@@ -59,6 +59,21 @@ export default function App() {
     fetchDataset();
   }, [fetchDataset]);
 
+  // Sync HTML lang, document title, and meta description with active language
+  useEffect(() => {
+    document.documentElement.lang = lang === 'pt' ? 'pt-BR' : lang;
+    document.title = `${tStr.appTitle} · ${tStr.appSubtitle}`;
+    document
+      .querySelector('meta[name="description"]')
+      ?.setAttribute('content', tStr.appDescription);
+    document
+      .querySelector('meta[property="og:title"]')
+      ?.setAttribute('content', tStr.appTitle);
+    document
+      .querySelector('meta[property="og:description"]')
+      ?.setAttribute('content', tStr.appDescription);
+  }, [lang, tStr]);
+
   // Dynamically measure fixed header height -> --header-h
   useEffect(() => {
     const el = headerChromeRef.current;
@@ -365,6 +380,10 @@ export default function App() {
 
         {/* Tab 5: Sobre os Dados */}
         {activeTab === 'about' && <AboutDataView />}
+
+        <footer className="mt-8 border-t border-slate-800/80 pt-4 text-center text-xs leading-relaxed text-[#B4C3D8]">
+          <p className="wrap-anywhere">{tStr.footerNotice}</p>
+        </footer>
       </main>
 
       <TestDetailDrawer />

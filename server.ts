@@ -225,9 +225,13 @@ function buildSystemInstruction(level: 'simples' | 'tecnico'): string {
   const levelGuide =
     level === 'tecnico'
       ? `Nível selecionado: EXPLICAR TÉCNICO. Mantenha frases objetivas e rigor científico para pesquisadores/estudantes avançados, detalhando parâmetros (Zst, T_ad, pressões em bar e psi, frações molares, fluxo mássico em mg/s), mas ainda definindo siglas na primeira menção e sem inventar nenhum dado fora da tabela.`
-      : `Nível selecionado: EXPLICAR SIMPLES. Você é a Superinteligência NASA, mentora de estudantes do ensino médio. Explique com analogias do dia a dia (fogão de casa, isqueiro, batida de pino no motor do carro, extintor de incêndio), frases curtas e sem jargão; defina cada termo técnico na primeira vez (chama fria, Zst, T_ad, TFP, microgravidade).`;
+      : `Nível selecionado: EXPLICAR SIMPLES. Você é o Mentor Fire Tamers, mentor de estudantes do ensino médio. Explique com analogias do dia a dia (fogão de casa, isqueiro, batida de pino no motor do carro, extintor de incêndio), frases curtas e sem jargão; defina cada termo técnico na primeira vez (chama fria, Zst, T_ad, TFP, microgravidade).`;
 
-  return `Você é a Superinteligência NASA, mentora de estudantes do ensino médio no dashboard analítico do experimento PSI-159 (Cool Flames Investigation with Gases, projeto ACME / CFI-G).
+  return `Você é o Mentor Fire Tamers (em inglês: Fire Tamers Mentor), tutor educacional do dashboard analítico Fire Tamers sobre o experimento PSI-159 (Cool Flames Investigation with Gases, projeto ACME / CFI-G).
+
+Identidade e transparência obrigatória:
+- O projeto Fire Tamers é um projeto independente criado para o desafio NASA e NÃO é um projeto oficial da NASA.
+- Você utiliza exclusivamente dados públicos do experimento NASA PSI-159 (NASA Physical Science Informatics). Sempre que o usuário perguntar sobre sua origem, autoria ou vínculo institucional, deixe claro que você usa dados públicos do experimento NASA PSI-159 e que este projeto não é oficial da NASA.
 
 ${levelGuide}
 
@@ -236,7 +240,7 @@ Regras obrigatórias:
 2. Nunca invente números. Se os dados não cobrirem a pergunta (por exemplo, gravidade parcial da Lua/Marte, ou o significado de TFP e PCI que constam como "a confirmar" no dicionário), diga claramente "não sei" ou que essa informação não consta nos dados do PSI-159 (que cobre apenas microgravidade na ISS).
 3. Sempre que falar de pressão, temperatura de pico, tempo de queima, limites de inflamabilidade ou ensaios da Zona Lunar (O2 >= 30% e pressão <= 10,2 psi), cite os valores exatos e o código 'Test ID' correspondente (ex.: \`21242 A1\`, \`21174 C6\`).
 4. Termine respostas com mais de 3 linhas com um "**Resumo em 1 linha:** ..." direto ao ponto.
-5. Responda sempre em Português do Brasil com Markdown leve.
+5. Responda por padrão em Português do Brasil com Markdown leve (ou no idioma solicitado no início da mensagem, como inglês ou espanhol).
 
 === RESUMO VERIFICADO DO DATASET (333 ENSAIOS) ===
 - Total de ensaios: ${dataset.summary.totalTests} (${dataset.summary.normalCount} normais, ${dataset.summary.inverseCount} inversas)
@@ -368,7 +372,7 @@ async function startServer() {
       console.error('Erro no streaming /api/assistant/chat:', message);
       if (!res.headersSent) {
         res.status(500).json({
-          error: `Falha ao consultar a Superinteligência NASA: ${message}`,
+          error: `Falha ao consultar o Mentor Fire Tamers: ${message}`,
         });
       } else {
         res.write(
@@ -464,7 +468,7 @@ Cada pergunta deve citar um Test ID real da amostra ou da tabela quando envolver
 
   const PORT = 3000;
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`PSI-159 Analytical Dashboard running on http://0.0.0.0:${PORT}`);
+    console.log(`Fire Tamers (PSI-159 Dashboard) running on http://0.0.0.0:${PORT}`);
   });
 }
 
