@@ -4,20 +4,32 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RotateCcw } from 'lucide-react';
 import { usePsiStore } from '../../store/usePsiStore';
 import type { Psi159Test } from '../../types/psi159';
-import { isInLunarZone } from '../../utils/analytics';
 import {
   flameTypeLabel,
   formatNumber,
-  fuelLabel,
-  outcomeMeta,
   testCategoryColor,
 } from '../../utils/formatters';
 import { useStrings } from '../../utils/i18n';
 import { ChartCard } from '../ChartCard';
+import {
+  PointTooltipPopover,
+  useClusterTooltip,
+  type PointTooltipAnchor,
+} from '../PointTooltipPopover';
 
 interface ParameterSpace3DProps {
   tests: Psi159Test[];
   loading?: boolean;
+}
+
+interface Cluster3D {
+  id: string;
+  x: number;
+  y: number;
+  z: number;
+  tests: Psi159Test[];
+  rep: Psi159Test;
+  color: string;
 }
 
 type ZAxisMetric = 'peak_burner_temp_c' | 'hc_flow_mg_s' | 'burn_time_s';
@@ -49,16 +61,55 @@ export const ParameterSpace3D: React.FC<ParameterSpace3DProps> = ({
   const [zMetric, setZMetric] = useState<ZAxisMetric>('peak_burner_temp_c');
   const [localFlameFilter, setLocalFlameFilter] = useState<'all' | 'normal' | 'inverse'>('all');
   const [webglError, setWebglError] = useState<string | null>(null);
-  const [hovered, setHovered] = useState<{
-    test: Psi159Test;
-    left: number;
-    top: number;
-  } | null>(null);
+  const clusterTooltip = useClusterTooltip<Cluster3D>((c) => c.id);
+  const tooltipActionsRef = useRef(clusterTooltip);
+  tooltipActionsRef.current = clusterTooltip;
 
   const visibleTests = useMemo(() => {
     if (localFlameFilter === 'all') return tests;
     return tests.filter((t) => t.flame_type === localFlameFilter);
   }, [tests, localFlameFilter]);
+
+  const clusters3D = useMemo<Cluster3D[]>(() => {
+    const zConf = zOptions.find((o) => o.key === zMetric)!;
+    const sorted = [...visibleTests].sort((a, b) => {
+      const pa = a.test_id === selectedTestId ? 4 : a.cool_flame ? 3 : a.hit_burner_temp_limit ? 2 : 1;
+      const pb = b.test_id === selectedTestId ? 4 : b.cool_flame ? 3 : b.hit_burner_temp_limit ? 2 : 1;
+      return pb - pa;
+    });
+    const groups: Cluster3D[] = [];
+    const distSqThreshold = 0.03;
+    for (const t of sorted) {
+      const rawZ = Number(t[zMetric] ?? 0);
+      const x = mapX(t.pressure_psi);
+      const y = mapY(t.o2_fraction);
+      const z = mapZ(rawZ, zConf.max);
+      let matched: Cluster3D | null = null;
+      for (const g of groups) {
+        const dx = g.x - x;
+        const dy = g.y - y;
+        const dz = g.z - z;
+        if (dx * dx + dy * dy + dz * dz <= distSqThreshold) {
+          matched = g;
+          break;
+        }
+      }
+      if (matched) {
+        matched.tests.push(t);
+      } else {
+        groups.push({
+          id: t.test_id,
+          x,
+          y,
+          z,
+          tests: [t],
+          rep: t,
+          color: testCategoryColor(t),
+        });
+      }
+    }
+    return groups;
+  }, [visibleTests, zMetric, zOptions, selectedTestId]);
 
   const controlsRef = useRef<OrbitControls | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -96,7 +147,9 @@ export const ParameterSpace3D: React.FC<ParameterSpace3DProps> = ({
     renderer.setPixelRatio(
       isSoftwareGl ? 1 : Math.min(window.devicePixelRatio || 1, 2)
     );
-    renderer.setSize(container.clientWidth, container.clientHeight);
+    const initialW = Math.max(1, container.clientWidth);
+    const initialH = Math.max(240, container.clientHeight);
+    renderer.setSize(initialW, initialH);
     renderer.setClearColor(0x0b1020, 1);
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
@@ -105,7 +158,7 @@ export const ParameterSpace3D: React.FC<ParameterSpace3DProps> = ({
 
     const camera = new THREE.PerspectiveCamera(
       45,
-      container.clientWidth / Math.max(1, container.clientHeight),
+      initialW / Math.max(1, initialH),
       0.1,
       100
     );
@@ -183,25 +236,23 @@ export const ParameterSpace3D: React.FC<ParameterSpace3DProps> = ({
     const instanced = new THREE.InstancedMesh(
       sphereGeo,
       sphereMat,
-      visibleTests.length
+      clusters3D.length
     );
 
     const dummy = new THREE.Object3D();
     const color = new THREE.Color();
 
-    visibleTests.forEach((t, idx) => {
-      const rawZ = Number(t[zMetric] ?? 0);
-      const scale = t.test_id === selectedTestId ? 1.7 : t.cool_flame ? 1.35 : 1.0;
-      dummy.position.set(
-        mapX(t.pressure_psi),
-        mapY(t.o2_fraction),
-        mapZ(rawZ, zConf.max)
-      );
+    clusters3D.forEach((cluster, idx) => {
+      const hasSelected = cluster.tests.some((t) => t.test_id === selectedTestId);
+      const hasCool = cluster.tests.some((t) => t.cool_flame);
+      const countBoost = cluster.tests.length > 1 ? 1.35 : 1.0;
+      const scale = hasSelected ? 1.75 : hasCool ? Math.max(1.35, countBoost) : countBoost;
+      dummy.position.set(cluster.x, cluster.y, cluster.z);
       dummy.scale.setScalar(scale);
       dummy.updateMatrix();
       instanced.setMatrixAt(idx, dummy.matrix);
 
-      color.set(testCategoryColor(t));
+      color.set(cluster.color);
       instanced.setColorAt(idx, color);
     });
 
@@ -212,10 +263,32 @@ export const ParameterSpace3D: React.FC<ParameterSpace3DProps> = ({
 
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
+    const projectedVec = new THREE.Vector3();
     let pointerDownPos = { x: 0, y: 0 };
+
+    const clusterToAnchor = (cluster: Cluster3D): PointTooltipAnchor => {
+      const rect = renderer.domElement.getBoundingClientRect();
+      projectedVec.set(cluster.x, cluster.y, cluster.z).project(camera);
+      return {
+        x: rect.left + (projectedVec.x * 0.5 + 0.5) * rect.width,
+        y: rect.top + (-projectedVec.y * 0.5 + 0.5) * rect.height,
+        width: 18,
+        height: 18,
+      };
+    };
 
     const onPointerDown = (e: PointerEvent) => {
       pointerDownPos = { x: e.clientX, y: e.clientY };
+      const rect = renderer.domElement.getBoundingClientRect();
+      pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+      const hits = raycaster.intersectObject(instanced);
+      if (hits.length > 0 && hits[0].instanceId !== undefined) {
+        renderer.domElement.setAttribute('data-point-trigger', 'true');
+      } else {
+        renderer.domElement.removeAttribute('data-point-trigger');
+      }
     };
 
     const onPointerMove = (e: PointerEvent) => {
@@ -225,18 +298,19 @@ export const ParameterSpace3D: React.FC<ParameterSpace3DProps> = ({
       raycaster.setFromCamera(pointer, camera);
       const hits = raycaster.intersectObject(instanced);
       if (hits.length > 0 && hits[0].instanceId !== undefined) {
-        const t = visibleTests[hits[0].instanceId];
+        const cluster = clusters3D[hits[0].instanceId];
         renderer.domElement.style.cursor = 'pointer';
-        // Clamp strictly within canvas edges
-        setHovered({
-          test: t,
-          left: Math.max(8, Math.min(rect.width - 208, e.clientX - rect.left + 12)),
-          top: Math.max(8, Math.min(rect.height - 115, e.clientY - rect.top - 16)),
-        });
+        renderer.domElement.setAttribute('data-point-trigger', 'true');
+        tooltipActionsRef.current.onPointEnter(cluster, clusterToAnchor(cluster));
       } else {
         renderer.domElement.style.cursor = 'grab';
-        setHovered(null);
+        renderer.domElement.removeAttribute('data-point-trigger');
+        tooltipActionsRef.current.onPointLeave();
       }
+    };
+
+    const onPointerLeaveCanvas = () => {
+      tooltipActionsRef.current.onPointLeave();
     };
 
     const onPointerUp = (e: PointerEvent) => {
@@ -251,24 +325,49 @@ export const ParameterSpace3D: React.FC<ParameterSpace3DProps> = ({
       raycaster.setFromCamera(pointer, camera);
       const hits = raycaster.intersectObject(instanced);
       if (hits.length > 0 && hits[0].instanceId !== undefined) {
-        const t = visibleTests[hits[0].instanceId];
-        selectTest(t.test_id, true);
+        const cluster = clusters3D[hits[0].instanceId];
+        if (cluster.tests.length === 1) {
+          tooltipActionsRef.current.closeAll();
+          selectTest(cluster.rep.test_id, true);
+        } else {
+          tooltipActionsRef.current.onPointClick(
+            cluster,
+            clusterToAnchor(cluster),
+            cluster.id,
+            e.pointerType || 'mouse'
+          );
+        }
+      } else {
+        tooltipActionsRef.current.closeAll();
       }
     };
 
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointermove', onPointerMove);
+    renderer.domElement.addEventListener('pointerleave', onPointerLeaveCanvas);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
 
-    const resizeObserver = new ResizeObserver(() => {
+    let retryFrameId = 0;
+    let retriesLeft = 10;
+    const syncRendererSize = () => {
       if (!container) return;
       const w = container.clientWidth;
-      const h = Math.max(1, container.clientHeight);
+      const h = container.clientHeight;
+      if (w <= 0 || h <= 0) {
+        if (retriesLeft > 0) {
+          retriesLeft -= 1;
+          retryFrameId = requestAnimationFrame(syncRendererSize);
+        }
+        return;
+      }
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
-    });
+    };
+
+    const resizeObserver = new ResizeObserver(syncRendererSize);
     resizeObserver.observe(container);
+    syncRendererSize();
 
     let rafId = 0;
     const animate = () => {
@@ -280,9 +379,11 @@ export const ParameterSpace3D: React.FC<ParameterSpace3DProps> = ({
 
     return () => {
       cancelAnimationFrame(rafId);
+      cancelAnimationFrame(retryFrameId);
       resizeObserver.disconnect();
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
+      renderer.domElement.removeEventListener('pointerleave', onPointerLeaveCanvas);
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
       controls.dispose();
       sphereGeo.dispose();
@@ -293,7 +394,7 @@ export const ParameterSpace3D: React.FC<ParameterSpace3DProps> = ({
       lunarMat.dispose();
       renderer.dispose();
     };
-  }, [visibleTests, zMetric, selectedTestId, selectTest, zOptions]);
+  }, [clusters3D, visibleTests.length, selectedTestId, selectTest, zOptions]);
 
   const activeZLabel = zOptions.find((z) => z.key === zMetric)?.label ?? '';
 
@@ -320,11 +421,10 @@ export const ParameterSpace3D: React.FC<ParameterSpace3DProps> = ({
       title={tStr.param3d.title}
       subtitle={tStr.param3d.subtitle}
       helpTitle={tStr.param3d.title}
-      helpBody={tStr.param3d.legendLunar}
+      helpBody={`${tStr.param3d.legendLunar}. ${tStr.param3d.helpTip}`}
       chartContextPrompt={tStr.prompts.explainParam3d}
       chartContextLabel={tStr.param3d.title}
       legend={legendItems}
-      footer={<span>{tStr.param3d.hintOrbit}</span>}
       isEmpty={visibleTests.length === 0}
       loading={loading}
       actions={
@@ -377,41 +477,48 @@ export const ParameterSpace3D: React.FC<ParameterSpace3DProps> = ({
           {webglError}
         </div>
       ) : (
-        <div className="relative h-full w-full overflow-hidden rounded-lg border border-slate-800/80 bg-[#0B1020]">
-          <div ref={containerRef} className="h-full w-full touch-none" />
+        <div
+          style={{ minHeight: 240 }}
+          className="relative h-full min-h-0 flex-1 w-full overflow-hidden rounded-lg border border-slate-800/80 bg-[#0B1020]"
+        >
+          <div
+            ref={containerRef}
+            style={{ minHeight: 240 }}
+            className="h-full w-full touch-none"
+          />
 
-          {hovered && (
-            <div
-              style={{
-                zIndex: 'var(--z-tooltip)',
-                left: hovered.left,
-                top: hovered.top,
-              }}
-              className="pointer-events-none absolute w-48 rounded-lg border border-slate-700 bg-[#0B1020]/95 p-2 text-[11px] shadow-xl"
-            >
-              <div className="flex items-center justify-between gap-2 font-mono text-cyan-300">
-                <span className="font-bold">{hovered.test.test_id}</span>
-                <span className="text-[10px] text-slate-400">
-                  {fuelLabel(hovered.test.fuel, lang)}
-                </span>
-              </div>
-              <div className="mt-1 font-mono text-[10px] tabular-nums text-slate-200">
-                <div>
-                  {flameTypeLabel(hovered.test.flame_type, lang)} ·{' '}
-                  {Math.round(hovered.test.o2_fraction * 100)}% O₂
-                </div>
-                <div>
-                  {formatNumber(hovered.test.pressure_psi, 1, lang)} psi ·{' '}
-                  {formatNumber(hovered.test.peak_burner_temp_c, 0, lang)} °C
-                </div>
-              </div>
-              <div className="mt-1 text-[10px] text-slate-300">
-                {outcomeMeta(hovered.test.outcome, lang).glyph}{' '}
-                {outcomeMeta(hovered.test.outcome, lang).label}
-                {isInLunarZone(hovered.test) ? ' · Lunar' : ''}
-              </div>
-            </div>
-          )}
+          <div
+            style={{ zIndex: 'var(--z-sticky)' }}
+            className="chart-text-annotation pointer-events-none absolute bottom-2 left-2 max-w-[calc(100%-16px)] rounded border border-slate-800/90 bg-[#0B1020]/88 px-2.5 py-1 text-slate-300"
+          >
+            <span className="wrap-anywhere font-mono">
+              {tStr.param3d.legendAxes(activeZLabel)}
+            </span>
+          </div>
+
+          <PointTooltipPopover
+            open={Boolean(clusterTooltip.active)}
+            pinned={clusterTooltip.isPinned}
+            anchor={clusterTooltip.active?.anchor ?? null}
+            tests={clusterTooltip.active?.data.tests ?? []}
+            headerSummary={
+              clusterTooltip.active && clusterTooltip.active.data.tests.length > 1
+                ? `${tStr.pointPopover.testsCount(
+                    clusterTooltip.active.data.tests.length
+                  )} · ${Math.round(
+                    clusterTooltip.active.data.rep.o2_fraction * 100
+                  )}% O₂ · ${formatNumber(
+                    clusterTooltip.active.data.rep.pressure_psi,
+                    1,
+                    lang
+                  )} psi`
+                : undefined
+            }
+            onPointerEnterPopover={clusterTooltip.onPopoverEnter}
+            onPointerLeavePopover={clusterTooltip.onPopoverLeave}
+            onPin={clusterTooltip.pinActive}
+            onClose={clusterTooltip.closeAll}
+          />
         </div>
       )}
     </ChartCard>

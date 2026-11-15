@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { Flame } from 'lucide-react';
 import { usePsiStore } from '../../store/usePsiStore';
 import type { Psi159Test } from '../../types/psi159';
@@ -10,6 +10,7 @@ import {
 } from '../../utils/formatters';
 import { useStrings } from '../../utils/i18n';
 import { ChartCard } from '../ChartCard';
+import { PointTooltipPopover, useClusterTooltip } from '../PointTooltipPopover';
 
 interface CoolFlameMatrixProps {
   tests: Psi159Test[];
@@ -26,6 +27,18 @@ export const CoolFlameMatrix: React.FC<CoolFlameMatrixProps> = ({
   const selectedTestId = usePsiStore((s) => s.selectedTestId);
   const lang = usePsiStore((s) => s.lang);
   const tStr = useStrings(lang);
+  const lastPointerTypeRef = useRef<string>('mouse');
+
+  type CoolRow = {
+    code: string;
+    label: string;
+    matching: Psi159Test[];
+    avgO2: number;
+    avgPsi: number;
+    fuels: string;
+    flameTypes: string;
+  };
+  const rowTooltip = useClusterTooltip<CoolRow>((r) => r.code);
 
   const rows = useMemo(() => {
     const list: Array<{
@@ -97,21 +110,20 @@ export const CoolFlameMatrix: React.FC<CoolFlameMatrixProps> = ({
       title={tStr.coolMatrix.title}
       subtitle={`${totalCool} ${tStr.coolMatrix.occurrences}`}
       helpTitle={tStr.coolMatrix.title}
-      helpBody={tStr.kpis.coolBody}
+      helpBody={`${tStr.kpis.coolBody} ${tStr.coolMatrix.helpTip}`}
       chartContextPrompt={tStr.prompts.explainCoolMatrix}
       chartContextLabel={tStr.coolMatrix.title}
-      footer={<span>{tStr.coolMatrix.hintClick}</span>}
       isEmpty={tests.length === 0}
       loading={loading}
       plotAutoHeight
     >
-      <div className="max-h-[380px] overflow-auto">
-        <table className="w-full min-w-[660px] border-collapse text-left text-xs">
+      <div className="max-h-[420px] overflow-auto">
+        <table className="chart-text-tick w-full min-w-[700px] border-collapse text-left">
           <thead
             style={{ zIndex: 'var(--z-sticky)' }}
             className="sticky top-0 bg-[#0F172A]"
           >
-            <tr className="border-b border-slate-800 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            <tr className="border-b border-slate-800 font-semibold uppercase tracking-wider text-slate-400">
               <th className="min-w-[140px] py-2 pr-3">{tStr.coolMatrix.code}</th>
               <th className="min-w-[65px] py-2 px-2 text-center">
                 {tStr.coolMatrix.tests}
@@ -147,7 +159,50 @@ export const CoolFlameMatrix: React.FC<CoolFlameMatrixProps> = ({
                     </span>
                   </td>
                   <td className="py-2 px-2 text-center font-mono font-bold tabular-nums text-slate-100">
-                    {count}
+                    {count > 0 ? (
+                      <button
+                        type="button"
+                        data-point-trigger="true"
+                        onMouseEnter={(e) => {
+                          const r = e.currentTarget.getBoundingClientRect();
+                          rowTooltip.onPointEnter(row, {
+                            x: r.left + r.width / 2,
+                            y: r.top + r.height / 2,
+                            width: r.width,
+                            height: r.height,
+                          });
+                        }}
+                        onMouseLeave={() => rowTooltip.onPointLeave()}
+                        onPointerDown={(e) => {
+                          lastPointerTypeRef.current = e.pointerType;
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (count === 1) {
+                            rowTooltip.closeAll();
+                            selectTest(row.matching[0].test_id, true);
+                          } else {
+                            const r = e.currentTarget.getBoundingClientRect();
+                            rowTooltip.onPointClick(
+                              row,
+                              {
+                                x: r.left + r.width / 2,
+                                y: r.top + r.height / 2,
+                                width: r.width,
+                                height: r.height,
+                              },
+                              row.code,
+                              lastPointerTypeRef.current
+                            );
+                          }
+                        }}
+                        className="inline-flex min-h-[26px] min-w-[32px] cursor-pointer items-center justify-center rounded-md border border-purple-400/45 bg-purple-500/20 px-2 py-0.5 font-mono font-bold text-purple-100 transition-colors hover:border-cyan-400/60 hover:bg-purple-500/35 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+                      >
+                        {count}
+                      </button>
+                    ) : (
+                      <span>0</span>
+                    )}
                   </td>
                   <td className="py-2 px-2 text-slate-200">{row.fuels}</td>
                   <td className="py-2 px-2 text-slate-300">{row.flameTypes}</td>
@@ -159,7 +214,7 @@ export const CoolFlameMatrix: React.FC<CoolFlameMatrixProps> = ({
                   </td>
                   <td className="py-2 pl-2">
                     {count === 0 ? (
-                      <span className="text-[11px] text-slate-500">
+                      <span className="text-slate-500">
                         {tStr.coolMatrix.noneInFilter}
                       </span>
                     ) : (
@@ -169,12 +224,12 @@ export const CoolFlameMatrix: React.FC<CoolFlameMatrixProps> = ({
                             key={m.test_id}
                             type="button"
                             onClick={() => selectTest(m.test_id, true)}
-                            className={`whitespace-nowrap rounded border px-1.5 py-0.5 font-mono text-[10px] transition-colors ${
+                            className={`cursor-pointer whitespace-nowrap rounded border px-1.5 py-0.5 font-mono transition-colors ${
                               m.test_id === selectedTestId
                                 ? 'border-white bg-purple-500/40 text-white'
-                                : 'border-purple-400/40 bg-[#0B1020]/70 text-purple-200 hover:border-purple-300'
+                                : 'border-purple-400/40 bg-[#0B1020]/70 text-purple-200 hover:border-cyan-400/60 hover:text-white'
                             }`}
-                            title={`${outcomeMeta(m.outcome, lang).label} · ${formatNumber(m.peak_burner_temp_c, 1, lang)} °C`}
+                            title={`${tStr.chartCard.clickToOpenTest} · ${outcomeMeta(m.outcome, lang).label} · ${formatNumber(m.peak_burner_temp_c, 1, lang)} °C`}
                           >
                             {m.test_id}
                           </button>
@@ -188,6 +243,24 @@ export const CoolFlameMatrix: React.FC<CoolFlameMatrixProps> = ({
           </tbody>
         </table>
       </div>
+
+      <PointTooltipPopover
+        open={Boolean(rowTooltip.active)}
+        pinned={rowTooltip.isPinned}
+        anchor={rowTooltip.active?.anchor ?? null}
+        tests={rowTooltip.active?.data.matching ?? []}
+        headerSummary={
+          rowTooltip.active && rowTooltip.active.data.matching.length > 1
+            ? `${rowTooltip.active.data.label} · ${tStr.pointPopover.testsCount(
+                rowTooltip.active.data.matching.length
+              )} · ~${Math.round(rowTooltip.active.data.avgO2 * 100)}% O₂`
+            : undefined
+        }
+        onPointerEnterPopover={rowTooltip.onPopoverEnter}
+        onPointerLeavePopover={rowTooltip.onPopoverLeave}
+        onPin={rowTooltip.pinActive}
+        onClose={rowTooltip.closeAll}
+      />
     </ChartCard>
   );
 };

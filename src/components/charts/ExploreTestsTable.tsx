@@ -176,33 +176,6 @@ export const ExploreTestsTable: React.FC<ExploreTestsTableProps> = ({
       isEmpty={tests.length === 0}
       loading={loading}
       plotAutoHeight
-      footer={
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
-          <span className="font-mono tabular-nums">
-            {tStr.table.pageOf(safePage, totalPages, sorted.length)}
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              disabled={safePage <= 1}
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="inline-flex min-h-[28px] items-center gap-1 whitespace-nowrap rounded border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs text-slate-200 hover:border-cyan-500/40 disabled:opacity-40"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              {tStr.table.prev}
-            </button>
-            <button
-              type="button"
-              disabled={safePage >= totalPages}
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="inline-flex min-h-[28px] items-center gap-1 whitespace-nowrap rounded border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs text-slate-200 hover:border-cyan-500/40 disabled:opacity-40"
-            >
-              {tStr.table.next}
-              <ChevronRight className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        </div>
-      }
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
@@ -231,7 +204,7 @@ export const ExploreTestsTable: React.FC<ExploreTestsTableProps> = ({
         </div>
       }
     >
-      <div className="max-h-[540px] overflow-auto rounded-lg border border-slate-800/70">
+      <div className="max-h-[calc(100dvh-var(--header-h)-var(--sticky-filters-h)-250px)] min-h-[260px] overflow-auto rounded-lg border border-slate-800/70">
         <table className="w-full min-w-[920px] border-collapse text-xs">
           <thead
             style={{ zIndex: 'var(--z-sticky)' }}
@@ -348,6 +321,31 @@ export const ExploreTestsTable: React.FC<ExploreTestsTableProps> = ({
             )}
           </tbody>
         </table>
+      </div>
+      <div className="chart-text-annotation mt-2.5 flex flex-wrap items-center justify-between gap-2 text-slate-300">
+        <span className="font-mono tabular-nums">
+          {tStr.table.pageOf(safePage, totalPages, sorted.length)}
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            disabled={safePage <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="inline-flex min-h-[28px] items-center gap-1 whitespace-nowrap rounded border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs text-slate-200 hover:border-cyan-500/40 disabled:opacity-40"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            {tStr.table.prev}
+          </button>
+          <button
+            type="button"
+            disabled={safePage >= totalPages}
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            className="inline-flex min-h-[28px] items-center gap-1 whitespace-nowrap rounded border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs text-slate-200 hover:border-cyan-500/40 disabled:opacity-40"
+          >
+            {tStr.table.next}
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
     </ChartCard>
   );

@@ -6,17 +6,54 @@ export interface UiStrings {
   appDescription: string;
   footerNotice: string;
   logoAlt: string;
+  cover: {
+    subtitle: string;
+    credit: string;
+    cta: string;
+    ctaAria: string;
+    langGroupAria: string;
+  };
   tabs: {
     overview: string;
+    analyses: string;
     ignition: string;
     cool_flames: string;
     explore: string;
     about: string;
   };
+  nav: {
+    breadcrumbRoot: string;
+    moreAnalyses: string;
+    backToOverview: string;
+    viewLunarRanking: string;
+    discoveriesTitle: string;
+    discoveriesSubtitle: string;
+    shortcutHint: string;
+    mobileTabMap: string;
+  };
+  overviewTabs: {
+    outcomes: string;
+    burn: string;
+    radar: string;
+    timeline: string;
+    flow: string;
+  };
   help: string;
   menu: string;
   presentation: string;
   exitPresentation: string;
+  textSize: {
+    label: string;
+    groupAria: string;
+    normal: string;
+    large: string;
+    xlarge: string;
+    decreaseAria: string;
+    defaultAria: string;
+    increaseAria: string;
+    mobileCapHint: string;
+    presentationHint: string;
+  };
   filters: {
     gas: string;
     flame: string;
@@ -32,9 +69,15 @@ export interface UiStrings {
   chartCard: {
     explain: string;
     explainShort: string;
+    expand: string;
+    collapse: string;
     legendBtn: string;
     emptyTitle: string;
     emptySubtitle: string;
+    errorTitle: string;
+    retry: string;
+    clickToFilter: string;
+    clickToOpenTest: string;
   };
   kpis: {
     filteredTitle: string;
@@ -84,8 +127,7 @@ export interface UiStrings {
     legendCool: string;
     legendLimit: string;
     legendNone: string;
-    hintBrush: string;
-    hintCell: string;
+    helpTip: string;
   };
   flowChart: {
     title: string;
@@ -96,19 +138,19 @@ export interface UiStrings {
     yAxis: string;
     legendLimit: string;
     legendCutoff: string;
-    hintClick: string;
+    helpTip: string;
   };
   outcomesChart: {
     title: string;
     subtitle: string;
     yAxisLabel: string;
     inverseStripe: string;
-    hintClick: string;
+    helpTip: string;
   };
   burnChart: {
     title: string;
     subtitle: string;
-    hintClick: string;
+    helpTip: string;
   };
   radarChart: {
     title: string;
@@ -118,18 +160,19 @@ export interface UiStrings {
     burnTime: string;
     peakTemp: string;
     ignitionRate: string;
+    helpTip: string;
   };
   timelineChart: {
     title: string;
     subtitle: string;
     tests: string;
     meanPeak: string;
-    hintClick: string;
+    helpTip: string;
   };
   coolMatrix: {
     title: string;
     occurrences: string;
-    hintClick: string;
+    helpTip: string;
     code: string;
     tests: string;
     gas: string;
@@ -160,7 +203,7 @@ export interface UiStrings {
   param3d: {
     title: string;
     subtitle: string;
-    hintOrbit: string;
+    helpTip: string;
     both: string;
     reset: string;
     zPeak: string;
@@ -185,6 +228,7 @@ export interface UiStrings {
     title: string;
     subtitle: string;
     howWeCalc: string;
+    helpTip: string;
     pts: string;
   };
   insights: {
@@ -203,6 +247,24 @@ export interface UiStrings {
     thermalSection: string;
     qualityTitle: string;
     commentTitle: string;
+    backToList: (n: number) => string;
+    listSearchPlaceholder: string;
+    sortLabel: string;
+    sortId: string;
+    sortO2: string;
+    sortPsi: string;
+    sortTemp: string;
+    sortBurn: string;
+    emptySearch: string;
+  };
+  pointPopover: {
+    testsCount: (n: number) => string;
+    clickToPin: string;
+    pinned: string;
+    close: string;
+    showingOf: (shown: number, total: number, canScrollMore: boolean) => string;
+    viewAll: (n: number) => string;
+    filterCell: string;
   };
   ai: {
     title: string;
@@ -233,6 +295,7 @@ export interface UiStrings {
     quizScoreTitle: string;
     quizScoreSummary: (correct: number, total: number) => string;
     quizLangChangedPrompt: string;
+    quizOfflineFallbackNotice: string;
     errorFallback: string;
     quizErrorFallback: string;
     streamErrorFallback: string;
@@ -280,17 +343,54 @@ const PT: UiStrings = {
   footerNotice:
     'Projeto independente criado para o desafio NASA. Dados: NASA Physical Science Informatics (PSI-159).',
   logoAlt: 'Logotipo Fire Tamers e ACME · Voltar para Visão Geral',
+  cover: {
+    subtitle: 'Segurança contra incêndios no espaço, explicada para todo mundo',
+    credit: 'Dados NASA ACME CFI-G (PSI-159) · Projeto independente',
+    cta: 'Abrir dashboard',
+    ctaAria: 'Abrir dashboard (Enter ou Espaço)',
+    langGroupAria: 'Selecionar idioma',
+  },
   tabs: {
     overview: 'Visão Geral',
+    analyses: 'Análises',
     ignition: 'Mapa de Ignição',
     cool_flames: 'Chamas Frias',
     explore: 'Explorar Ensaios',
     about: 'Sobre os Dados',
   },
+  nav: {
+    breadcrumbRoot: 'Fire Tamers',
+    moreAnalyses: 'Mostrar mais análises',
+    backToOverview: 'Voltar à Visão Geral',
+    viewLunarRanking: 'Ver ranking Lua',
+    discoveriesTitle: 'Descobertas',
+    discoveriesSubtitle: 'Insights calculados nos filtros atuais',
+    shortcutHint: 'Atalhos 1–5',
+    mobileTabMap: 'Mapa',
+  },
+  overviewTabs: {
+    outcomes: 'Desfechos',
+    burn: 'Tempo de queima',
+    radar: 'Normal × Inversa',
+    timeline: 'Linha do tempo',
+    flow: 'Fluxo × Pico',
+  },
   help: 'Ajuda',
   menu: 'Menu',
   presentation: 'Apresentação (P)',
   exitPresentation: 'Sair (P / Esc)',
+  textSize: {
+    label: 'Tamanho do texto',
+    groupAria: 'Tamanho do texto dos gráficos e cards (atalhos [ e ])',
+    normal: 'Normal (100%)',
+    large: 'Grande (115%)',
+    xlarge: 'Extra grande (130%)',
+    decreaseAria: 'Tamanho do texto: Normal (100%) · Atalho [',
+    defaultAria: 'Tamanho do texto: Grande (115%) · Padrão',
+    increaseAria: 'Tamanho do texto: Extra grande (130%) · Atalho ]',
+    mobileCapHint: 'No celular o máximo é Grande (115%)',
+    presentationHint: 'Modo Apresentação força Extra grande (130%)',
+  },
   filters: {
     gas: 'Gás:',
     flame: 'Chama:',
@@ -306,9 +406,15 @@ const PT: UiStrings = {
   chartCard: {
     explain: 'Explicar este gráfico',
     explainShort: 'Explicar',
+    expand: 'Expandir gráfico',
+    collapse: 'Fechar visualização ampliada',
     legendBtn: 'Legenda',
     emptyTitle: 'Nenhum ensaio corresponde aos filtros atuais.',
     emptySubtitle: 'Amplie a faixa de O₂ ou pressão, ou remova o filtro cruzado.',
+    errorTitle: 'Não foi possível exibir este gráfico. Tentar de novo',
+    retry: 'Tentar de novo',
+    clickToFilter: 'Clique para filtrar',
+    clickToOpenTest: 'Clique para abrir o ensaio',
   },
   kpis: {
     filteredTitle: 'Ensaios filtrados',
@@ -358,8 +464,7 @@ const PT: UiStrings = {
     legendCool: 'Fria',
     legendLimit: 'Limite',
     legendNone: 'Sem ignição',
-    hintBrush: 'Arraste para filtrar região · Clique num ponto para abrir o ensaio',
-    hintCell: 'Clique numa célula para filtrar',
+    helpTip: 'Arraste uma região no gráfico para filtrar por O₂ e pressão, ou clique em um ponto ou célula para inspecionar.',
   },
   flowChart: {
     title: 'Fluxo de Combustível × Pico Térmico',
@@ -370,19 +475,19 @@ const PT: UiStrings = {
     yAxis: 'Pico Térmico (°C)',
     legendLimit: 'Limite',
     legendCutoff: 'Fluxo cortado',
-    hintClick: 'Cor por gás · Clique num ponto para inspecionar',
+    helpTip: 'Cor indica o gás combustível. Clique em qualquer ponto para abrir os detalhes do ensaio.',
   },
   outcomesChart: {
     title: 'Desfechos por Gás e Chama',
     subtitle: 'Barras agrupadas: Normal (sólida) × Inversa (hachurada)',
     yAxisLabel: 'Nº de ensaios',
     inverseStripe: 'Inversa (hach.)',
-    hintClick: 'Clique em um segmento para filtrar os gráficos',
+    helpTip: 'Clique em qualquer segmento da barra para filtrar os gráficos por gás, chama e desfecho.',
   },
   burnChart: {
     title: 'Distribuição do Tempo de Queima',
     subtitle: 'Duração da chama em segundos por gás',
-    hintClick: 'Clique em uma faixa para filtrar os gráficos',
+    helpTip: 'Clique em uma faixa de duração para filtrar os gráficos correspondentes.',
   },
   radarChart: {
     title: 'Comparativo Normal × Inversa',
@@ -392,18 +497,19 @@ const PT: UiStrings = {
     burnTime: 'Queima (s)',
     peakTemp: 'Pico (°C)',
     ignitionRate: 'Ignição %',
+    helpTip: 'Na chama normal, o gás combustível sai do queimador para uma câmara com O₂. Na chama inversa, o O₂ sai do queimador para uma atmosfera rica em combustível.',
   },
   timelineChart: {
     title: 'Linha do Tempo (Dias 1–12)',
     subtitle: 'Ensaios realizados e pico térmico médio por dia',
     tests: 'Ensaios',
     meanPeak: 'Pico (°C)',
-    hintClick: 'Clique em um dia para filtrar os gráficos',
+    helpTip: 'Os 333 ensaios do PSI-159 foram executados ao longo de 12 dias na câmara CFI-G. Clique em qualquer dia para filtrar os outros gráficos.',
   },
   coolMatrix: {
     title: 'Matriz de Chama Fria · Códigos PCI-A a PCI-G',
     occurrences: 'ocorrências nos filtros atuais',
-    hintClick: 'Clique em um Test ID para abrir os detalhes do ensaio',
+    helpTip: 'Clique em um Test ID para abrir os detalhes do ensaio, ou na contagem para navegar pelos casos agrupados.',
     code: 'Código',
     tests: 'Ensaios',
     gas: 'Gás',
@@ -434,7 +540,7 @@ const PT: UiStrings = {
   param3d: {
     title: 'Espaço de Parâmetros 3D · Pressão × O₂ × Eixo Z',
     subtitle: 'Visualização tridimensional com Zona Lunar destacada',
-    hintOrbit: 'Arraste para girar · Scroll para zoom · Clique numa esfera',
+    helpTip: 'Arraste para girar, use o scroll para zoom e clique numa esfera para inspecionar os ensaios.',
     both: 'Ambas',
     reset: 'Resetar',
     zPeak: 'Pico térmico',
@@ -459,6 +565,7 @@ const PT: UiStrings = {
     title: 'Top 10 · Base Lunar',
     subtitle: 'Ranqueamento de risco (O₂ ≥ 30%, P ≤ 10,2 psi)',
     howWeCalc: 'Como calculamos?',
+    helpTip: 'Zona Lunar (até 40 pts: O₂ ≥ 30% e P ≤ 10,2 psi) + Chama Fria (+25 pts) + Pico Térmico (até 20 pts) + Tempo de Queima (até 15 pts). Clique em um ensaio para abrir os detalhes.',
     pts: 'pts',
   },
   insights: {
@@ -478,6 +585,27 @@ const PT: UiStrings = {
     thermalSection: 'Resultados Térmicos e Combustão',
     qualityTitle: 'Notas de qualidade',
     commentTitle: 'Comentário original da NASA',
+    backToList: (n) => `Voltar à lista (${n})`,
+    listSearchPlaceholder: 'Buscar por Test ID...',
+    sortLabel: 'Ordenar:',
+    sortId: 'Test ID',
+    sortO2: 'O₂ %',
+    sortPsi: 'Pressão (psi)',
+    sortTemp: 'Pico (°C)',
+    sortBurn: 'Queima (s)',
+    emptySearch: 'Nenhum ensaio encontrado para esta busca.',
+  },
+  pointPopover: {
+    testsCount: (n) => `${n} ensaios`,
+    clickToPin: 'Clique para fixar',
+    pinned: 'Fixado',
+    close: 'Fechar lista',
+    showingOf: (shown, total, canScrollMore) =>
+      canScrollMore
+        ? `Mostrando ${shown} de ${total} · role para ver mais`
+        : `Mostrando ${shown} de ${total}`,
+    viewAll: (n) => `Ver todos (${n})`,
+    filterCell: 'Filtrar célula',
   },
   ai: {
     title: 'Mentor Fire Tamers',
@@ -510,6 +638,8 @@ const PT: UiStrings = {
     quizScoreSummary: (correct, total) =>
       `Você acertou ${correct} de ${total} questões.`,
     quizLangChangedPrompt: 'Idioma alterado. Gerar novo quiz?',
+    quizOfflineFallbackNotice:
+      'Cota temporária da IA atingida — quiz gerado diretamente dos dados reais do PSI-159.',
     errorFallback: 'Não foi possível consultar o Mentor Fire Tamers.',
     quizErrorFallback: 'Falha ao gerar o quiz rápido.',
     streamErrorFallback: 'Erro na transmissão da resposta.',
@@ -559,17 +689,54 @@ const EN: UiStrings = {
   footerNotice:
     'Independent project created for the NASA challenge. Data: NASA Physical Science Informatics (PSI-159).',
   logoAlt: 'Fire Tamers and ACME logo · Back to Overview',
+  cover: {
+    subtitle: 'Fire safety in space, explained for everyone',
+    credit: 'NASA ACME CFI-G data (PSI-159) · Independent project',
+    cta: 'Open dashboard',
+    ctaAria: 'Open dashboard (Enter or Space)',
+    langGroupAria: 'Select language',
+  },
   tabs: {
     overview: 'Overview',
+    analyses: 'Analytics',
     ignition: 'Ignition Map',
     cool_flames: 'Cool Flames',
     explore: 'Explore Tests',
     about: 'About Data',
   },
+  nav: {
+    breadcrumbRoot: 'Fire Tamers',
+    moreAnalyses: 'Show more analytics',
+    backToOverview: 'Back to Overview',
+    viewLunarRanking: 'View Lunar ranking',
+    discoveriesTitle: 'Discoveries',
+    discoveriesSubtitle: 'Insights computed from active filters',
+    shortcutHint: 'Shortcuts 1–5',
+    mobileTabMap: 'Map',
+  },
+  overviewTabs: {
+    outcomes: 'Outcomes',
+    burn: 'Burn time',
+    radar: 'Normal × Inverse',
+    timeline: 'Timeline',
+    flow: 'Flow × Peak',
+  },
   help: 'Help',
   menu: 'Menu',
   presentation: 'Present (P)',
   exitPresentation: 'Exit (P / Esc)',
+  textSize: {
+    label: 'Text size',
+    groupAria: 'Chart and card text size (shortcuts [ and ])',
+    normal: 'Normal (100%)',
+    large: 'Large (115%)',
+    xlarge: 'Extra large (130%)',
+    decreaseAria: 'Text size: Normal (100%) · Shortcut [',
+    defaultAria: 'Text size: Large (115%) · Default',
+    increaseAria: 'Text size: Extra large (130%) · Shortcut ]',
+    mobileCapHint: 'Mobile is capped at Large (115%)',
+    presentationHint: 'Presentation Mode forces Extra large (130%)',
+  },
   filters: {
     gas: 'Fuel:',
     flame: 'Flame:',
@@ -585,9 +752,15 @@ const EN: UiStrings = {
   chartCard: {
     explain: 'Explain this chart',
     explainShort: 'Explain',
+    expand: 'Expand chart',
+    collapse: 'Close expanded view',
     legendBtn: 'Legend',
     emptyTitle: 'No tests match the current filters.',
     emptySubtitle: 'Widen the O₂ or pressure range, or clear the cross-filter.',
+    errorTitle: 'Unable to display this chart. Try again',
+    retry: 'Try again',
+    clickToFilter: 'Click to filter',
+    clickToOpenTest: 'Click to open test',
   },
   kpis: {
     filteredTitle: 'Filtered tests',
@@ -637,8 +810,7 @@ const EN: UiStrings = {
     legendCool: 'Cool',
     legendLimit: 'Limit',
     legendNone: 'No ignition',
-    hintBrush: 'Drag box on plot to filter · Click point to inspect',
-    hintCell: 'Click cell to filter',
+    helpTip: 'Drag a box on the plot to filter by O₂ and pressure, or click a point or cell to inspect.',
   },
   flowChart: {
     title: 'Fuel Flow × Peak Burner Temp',
@@ -649,19 +821,19 @@ const EN: UiStrings = {
     yAxis: 'Peak Temp (°C)',
     legendLimit: 'Limit',
     legendCutoff: 'Flow cutoff',
-    hintClick: 'Color by fuel · Click a point to inspect',
+    helpTip: 'Color encodes fuel gas. Click any point to inspect test details.',
   },
   outcomesChart: {
     title: 'Outcomes by Fuel & Flame',
     subtitle: 'Grouped bars: Normal (solid) vs. Inverse (hatched)',
     yAxisLabel: 'No. of tests',
     inverseStripe: 'Inverse (hatch)',
-    hintClick: 'Click a bar segment to filter',
+    helpTip: 'Click any bar segment to filter the dashboard by fuel, flame type, and outcome.',
   },
   burnChart: {
     title: 'Burn Duration Distribution',
     subtitle: 'Flame duration bins (s) by fuel',
-    hintClick: 'Click a bar bin to filter',
+    helpTip: 'Click any duration bin to filter matching tests across the dashboard.',
   },
   radarChart: {
     title: 'Normal vs. Inverse Comparison',
@@ -671,18 +843,19 @@ const EN: UiStrings = {
     burnTime: 'Burn (s)',
     peakTemp: 'Peak (°C)',
     ignitionRate: 'Ignition %',
+    helpTip: 'In a normal flame, fuel exits the burner into an O₂ chamber. In an inverse flame, O₂ flows into a fuel-rich atmosphere.',
   },
   timelineChart: {
     title: 'Campaign Timeline (Days 1–12)',
     subtitle: 'Tests performed and mean peak temp per day',
     tests: 'Tests',
     meanPeak: 'Peak (°C)',
-    hintClick: 'Click a day bar to filter',
+    helpTip: 'All 333 PSI-159 tests ran across 12 campaign days in the CFI-G chamber. Click any day bar to filter the dashboard.',
   },
   coolMatrix: {
     title: 'Cool Flame Matrix · Codes PCI-A to PCI-G',
     occurrences: 'occurrences in active filters',
-    hintClick: 'Click any Test ID to inspect test details',
+    helpTip: 'Click any Test ID to inspect test details, or click a count badge to browse grouped tests.',
     code: 'Code',
     tests: 'Tests',
     gas: 'Fuel',
@@ -713,7 +886,7 @@ const EN: UiStrings = {
   param3d: {
     title: '3D Parameter Space · Pressure × O₂ × Z-Axis',
     subtitle: '3D distribution with Lunar Zone volume highlighted',
-    hintOrbit: 'Drag to orbit · Scroll to zoom · Click a sphere to inspect',
+    helpTip: 'Drag to orbit, scroll to zoom, and click any sphere to inspect grouped tests.',
     both: 'Both',
     reset: 'Reset',
     zPeak: 'Peak temp',
@@ -738,6 +911,7 @@ const EN: UiStrings = {
     title: 'Top 10 · Lunar Base Relevance',
     subtitle: 'Safety risk ranking (O₂ ≥ 30%, P ≤ 10.2 psi)',
     howWeCalc: 'How scored?',
+    helpTip: 'Lunar Zone (up to 40 pts: O₂ ≥ 30% & P ≤ 10.2 psi) + Cool Flame (+25 pts) + Peak Temp (up to 20 pts) + Burn Time (up to 15 pts). Click a test to inspect.',
     pts: 'pts',
   },
   insights: {
@@ -757,6 +931,27 @@ const EN: UiStrings = {
     thermalSection: 'Thermal & Combustion Results',
     qualityTitle: 'Quality notes',
     commentTitle: 'Original NASA comment',
+    backToList: (n) => `Back to list (${n})`,
+    listSearchPlaceholder: 'Search by Test ID...',
+    sortLabel: 'Sort:',
+    sortId: 'Test ID',
+    sortO2: 'O₂ %',
+    sortPsi: 'Pressure (psi)',
+    sortTemp: 'Peak (°C)',
+    sortBurn: 'Burn time (s)',
+    emptySearch: 'No matching tests found.',
+  },
+  pointPopover: {
+    testsCount: (n) => `${n} tests`,
+    clickToPin: 'Click to pin',
+    pinned: 'Pinned',
+    close: 'Close list',
+    showingOf: (shown, total, canScrollMore) =>
+      canScrollMore
+        ? `Showing ${shown} of ${total} · scroll for more`
+        : `Showing ${shown} of ${total}`,
+    viewAll: (n) => `View all (${n})`,
+    filterCell: 'Filter cell',
   },
   ai: {
     title: 'Fire Tamers Mentor',
@@ -789,6 +984,8 @@ const EN: UiStrings = {
     quizScoreSummary: (correct, total) =>
       `You got ${correct} out of ${total} questions right.`,
     quizLangChangedPrompt: 'Language changed. Generate new quiz?',
+    quizOfflineFallbackNotice:
+      'Temporary AI quota reached — quiz generated directly from verified PSI-159 data.',
     errorFallback: 'Unable to reach the Fire Tamers Mentor.',
     quizErrorFallback: 'Failed to generate the quick quiz.',
     streamErrorFallback: 'Streaming response error.',
@@ -838,17 +1035,54 @@ const ES: UiStrings = {
   footerNotice:
     'Proyecto independiente creado para el desafío NASA. Datos: NASA Physical Science Informatics (PSI-159).',
   logoAlt: 'Logotipo Fire Tamers y ACME · Volver a Resumen',
+  cover: {
+    subtitle: 'Seguridad contra incendios en el espacio, explicada para todos',
+    credit: 'Datos NASA ACME CFI-G (PSI-159) · Proyecto independiente',
+    cta: 'Abrir panel',
+    ctaAria: 'Abrir panel (Enter o Espacio)',
+    langGroupAria: 'Seleccionar idioma',
+  },
   tabs: {
     overview: 'Resumen',
+    analyses: 'Análisis',
     ignition: 'Mapa de Ignición',
     cool_flames: 'Llamas Frías',
     explore: 'Explorar Ensayos',
     about: 'Sobre los Datos',
   },
+  nav: {
+    breadcrumbRoot: 'Fire Tamers',
+    moreAnalyses: 'Mostrar más análisis',
+    backToOverview: 'Volver al Resumen',
+    viewLunarRanking: 'Ver ranking Lunar',
+    discoveriesTitle: 'Hallazgos',
+    discoveriesSubtitle: 'Hallazgos calculados con filtros activos',
+    shortcutHint: 'Atajos 1–5',
+    mobileTabMap: 'Mapa',
+  },
+  overviewTabs: {
+    outcomes: 'Desenlaces',
+    burn: 'Combustión',
+    radar: 'Normal × Inversa',
+    timeline: 'Línea temporal',
+    flow: 'Flujo × Pico',
+  },
   help: 'Ayuda',
   menu: 'Menú',
   presentation: 'Presentar (P)',
   exitPresentation: 'Salir (P / Esc)',
+  textSize: {
+    label: 'Tamaño de texto',
+    groupAria: 'Tamaño del texto en gráficos y tarjetas (atajos [ y ])',
+    normal: 'Normal (100%)',
+    large: 'Grande (115%)',
+    xlarge: 'Extra grande (130%)',
+    decreaseAria: 'Tamaño de texto: Normal (100%) · Atajo [',
+    defaultAria: 'Tamaño de texto: Grande (115%) · Predeterminado',
+    increaseAria: 'Tamaño de texto: Extra grande (130%) · Atajo ]',
+    mobileCapHint: 'En móvil el máximo es Grande (115%)',
+    presentationHint: 'El Modo Presentación fuerza Extra grande (130%)',
+  },
   filters: {
     gas: 'Gas:',
     flame: 'Llama:',
@@ -864,9 +1098,15 @@ const ES: UiStrings = {
   chartCard: {
     explain: 'Explicar este gráfico',
     explainShort: 'Explicar',
+    expand: 'Ampliar gráfico',
+    collapse: 'Cerrar vista ampliada',
     legendBtn: 'Leyenda',
     emptyTitle: 'Ningún ensayo coincide con los filtros actuales.',
     emptySubtitle: 'Amplía el rango de O₂ o presión, o quita el filtro cruzado.',
+    errorTitle: 'No se pudo mostrar este gráfico. Intentar de nuevo',
+    retry: 'Intentar de nuevo',
+    clickToFilter: 'Clic para filtrar',
+    clickToOpenTest: 'Clic para abrir el ensayo',
   },
   kpis: {
     filteredTitle: 'Ensayos filtrados',
@@ -916,8 +1156,7 @@ const ES: UiStrings = {
     legendCool: 'Fría',
     legendLimit: 'Límite',
     legendNone: 'Sin ignición',
-    hintBrush: 'Arrastra para filtrar · Clic en punto para ver ensayo',
-    hintCell: 'Clic en celda para filtrar',
+    helpTip: 'Arrastra un recuadro en el gráfico para filtrar por O₂ y presión, o haz clic en un punto o celda para inspeccionar.',
   },
   flowChart: {
     title: 'Flujo de Gas × Pico Térmico',
@@ -928,19 +1167,19 @@ const ES: UiStrings = {
     yAxis: 'Pico Térmico (°C)',
     legendLimit: 'Límite',
     legendCutoff: 'Flujo cortado',
-    hintClick: 'Color por gas · Clic en un punto para inspeccionar',
+    helpTip: 'El color indica el gas combustible. Haz clic en cualquier punto para ver los detalles del ensayo.',
   },
   outcomesChart: {
     title: 'Resultados por Gas y Llama',
     subtitle: 'Barras agrupadas: Normal (sólida) × Inversa (rayada)',
     yAxisLabel: 'Nº de ensayos',
     inverseStripe: 'Inversa (ray.)',
-    hintClick: 'Clic en un segmento para filtrar',
+    helpTip: 'Haz clic en cualquier segmento de la barra para filtrar por gas, llama y resultado.',
   },
   burnChart: {
     title: 'Distribución del Tiempo de Llama',
     subtitle: 'Duración en segundos por gas',
-    hintClick: 'Clic en una barra para filtrar',
+    helpTip: 'Haz clic en un rango de duración para filtrar los ensayos correspondientes.',
   },
   radarChart: {
     title: 'Comparativa Normal × Inversa',
@@ -950,18 +1189,19 @@ const ES: UiStrings = {
     burnTime: 'Llama (s)',
     peakTemp: 'Pico (°C)',
     ignitionRate: 'Ignición %',
+    helpTip: 'En la llama normal, el combustible sale hacia una cámara con O₂. En la llama inversa, el O₂ fluye hacia una atmósfera rica en combustible.',
   },
   timelineChart: {
     title: 'Línea Temporal (Días 1–12)',
     subtitle: 'Ensayos realizados y pico térmico medio por día',
     tests: 'Ensayos',
     meanPeak: 'Pico medio (°C)',
-    hintClick: 'Clic en un día para filtrar',
+    helpTip: 'Los 333 ensayos de PSI-159 se ejecutaron en 12 días en la cámara CFI-G. Haz clic en un día para filtrar los demás gráficos.',
   },
   coolMatrix: {
     title: 'Matriz de Llama Fría · Códigos PCI-A a PCI-G',
     occurrences: 'casos en filtros activos',
-    hintClick: 'Clic en un Test ID para ver detalles del ensayo',
+    helpTip: 'Haz clic en un Test ID para ver los detalles del ensayo, o en el conteo para explorar la lista agrupada.',
     code: 'Código',
     tests: 'Ensayos',
     gas: 'Gas',
@@ -992,7 +1232,7 @@ const ES: UiStrings = {
   param3d: {
     title: 'Espacio de Parámetros 3D · Presión × O₂ × Eje Z',
     subtitle: 'Distribución 3D con volumen de Zona Lunar destacado',
-    hintOrbit: 'Arrastra para rotar · Rueda para zoom · Clic en esfera',
+    helpTip: 'Arrastra para rotar, usa la rueda para zoom y haz clic en una esfera para inspeccionar ensayos.',
     both: 'Ambas',
     reset: 'Reiniciar',
     zPeak: 'Pico térmico',
@@ -1017,6 +1257,7 @@ const ES: UiStrings = {
     title: 'Top 10 · Base Lunar',
     subtitle: 'Ranking de riesgo (O₂ ≥ 30%, P ≤ 10,2 psi)',
     howWeCalc: '¿Cómo se calcula?',
+    helpTip: 'Zona Lunar (hasta 40 pts: O₂ ≥ 30% y P ≤ 10,2 psi) + Llama Fría (+25 pts) + Pico Térmico (hasta 20 pts) + Duración (hasta 15 pts). Haz clic en un ensayo para ver detalles.',
     pts: 'pts',
   },
   insights: {
@@ -1036,6 +1277,27 @@ const ES: UiStrings = {
     thermalSection: 'Resultados Térmicos y Combustión',
     qualityTitle: 'Notas de calidad',
     commentTitle: 'Comentario original de NASA',
+    backToList: (n) => `Volver a la lista (${n})`,
+    listSearchPlaceholder: 'Buscar por Test ID...',
+    sortLabel: 'Ordenar:',
+    sortId: 'Test ID',
+    sortO2: 'O₂ %',
+    sortPsi: 'Presión (psi)',
+    sortTemp: 'Pico (°C)',
+    sortBurn: 'Duración (s)',
+    emptySearch: 'No se encontraron ensayos para esta búsqueda.',
+  },
+  pointPopover: {
+    testsCount: (n) => `${n} ensayos`,
+    clickToPin: 'Clic para fijar',
+    pinned: 'Fijado',
+    close: 'Cerrar lista',
+    showingOf: (shown, total, canScrollMore) =>
+      canScrollMore
+        ? `Mostrando ${shown} de ${total} · desplaza para ver más`
+        : `Mostrando ${shown} de ${total}`,
+    viewAll: (n) => `Ver todos (${n})`,
+    filterCell: 'Filtrar celda',
   },
   ai: {
     title: 'Mentor Fire Tamers',
@@ -1068,6 +1330,8 @@ const ES: UiStrings = {
     quizScoreSummary: (correct, total) =>
       `Acertaste ${correct} de ${total} preguntas.`,
     quizLangChangedPrompt: 'Idioma cambiado. ¿Generar nuevo quiz?',
+    quizOfflineFallbackNotice:
+      'Cuota temporal de IA alcanzada — quiz generado directamente con datos verificados de PSI-159.',
     errorFallback: 'No fue posible consultar al Mentor Fire Tamers.',
     quizErrorFallback: 'Error al generar el quiz rápido.',
     streamErrorFallback: 'Error al transmitir la respuesta.',

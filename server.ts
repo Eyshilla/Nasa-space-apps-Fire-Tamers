@@ -3,79 +3,8 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
-import type {
-  DataDictionaryEntry,
-  Psi159DatasetResponse,
-  Psi159Summary,
-  Psi159Test,
-} from './src/types/psi159.ts';
-
-function parseCsvRows(csvText: string): string[][] {
-  const rows: string[][] = [];
-  let currentRow: string[] = [];
-  let currentField = '';
-  let inQuotes = false;
-
-  const cleanText = csvText.replace(/^\uFEFF/, '');
-
-  for (let i = 0; i < cleanText.length; i++) {
-    const char = cleanText[i];
-    const nextChar = cleanText[i + 1];
-
-    if (inQuotes) {
-      if (char === '"' && nextChar === '"') {
-        currentField += '"';
-        i++;
-      } else if (char === '"') {
-        inQuotes = false;
-      } else {
-        currentField += char;
-      }
-    } else {
-      if (char === '"') {
-        inQuotes = true;
-      } else if (char === ',') {
-        currentRow.push(currentField);
-        currentField = '';
-      } else if (char === '\r' && nextChar === '\n') {
-        currentRow.push(currentField);
-        rows.push(currentRow);
-        currentRow = [];
-        currentField = '';
-        i++;
-      } else if (char === '\n' || char === '\r') {
-        currentRow.push(currentField);
-        rows.push(currentRow);
-        currentRow = [];
-        currentField = '';
-      } else {
-        currentField += char;
-      }
-    }
-  }
-
-  if (currentField.length > 0 || currentRow.length > 0) {
-    currentRow.push(currentField);
-    rows.push(currentRow);
-  }
-
-  return rows.filter((row) => row.some((cell) => cell.trim() !== ''));
-}
-
-function toNum(val: string | undefined): number | null {
-  if (!val || val.trim() === '') return null;
-  const n = Number(val);
-  return Number.isFinite(n) ? n : null;
-}
-
-function toBool(val: string | undefined): boolean {
-  return (val ?? '').trim().toLowerCase() === 'true';
-}
-
-function toStr(val: string | undefined): string | null {
-  if (!val || val.trim() === '') return null;
-  return val.trim();
-}
+import type { Psi159Test, QuizQuestion } from './src/types/psi159.ts';
+import { parsePsi159Dataset } from './src/utils/parsePsi159.ts';
 
 const dictPath = path.resolve(
   process.cwd(),
@@ -89,119 +18,7 @@ const dataPath = path.resolve(
 const rawDictionaryCsv = fs.readFileSync(dictPath, 'utf-8');
 const rawDataCsv = fs.readFileSync(dataPath, 'utf-8');
 
-function loadDataset(): Psi159DatasetResponse {
-  const dictRows = parseCsvRows(rawDictionaryCsv);
-  const dictHeaders = dictRows[0];
-  const dictionary: DataDictionaryEntry[] = dictRows.slice(1).map((row) => {
-    const record: Record<string, string> = {};
-    dictHeaders.forEach((h, idx) => {
-      record[h] = row[idx] ?? '';
-    });
-    return {
-      coluna: record.coluna ?? '',
-      rotulo: record.rotulo ?? '',
-      unidade: record.unidade ?? '',
-      explicacao_simples: record.explicacao_simples ?? '',
-      observacao_tecnica: record.observacao_tecnica ?? '',
-    };
-  });
-
-  const dataRows = parseCsvRows(rawDataCsv);
-  const dataHeaders = dataRows[0];
-  const tests: Psi159Test[] = dataRows.slice(1).map((row) => {
-    const r: Record<string, string> = {};
-    dataHeaders.forEach((h, idx) => {
-      r[h] = row[idx] ?? '';
-    });
-    return {
-      investigation: r.investigation ?? 'PSI-159',
-      test_id: r.test_id ?? '',
-      flame_type: r.flame_type === 'inverse' ? 'inverse' : 'normal',
-      day: toNum(r.day) ?? 0,
-      fuel: r.fuel ?? '',
-      fuel_mix_pct: toNum(r.fuel_mix_pct) ?? 100,
-      o2_fraction: toNum(r.o2_fraction) ?? 0,
-      o2_fraction_after: toNum(r.o2_fraction_after) ?? 0,
-      o2_location: r.o2_location ?? '',
-      fuel_fraction: toNum(r.fuel_fraction) ?? 0,
-      fuel_fraction_after: toNum(r.fuel_fraction_after) ?? 0,
-      fuel_location: r.fuel_location ?? '',
-      pressure_bar: toNum(r.pressure_bar) ?? 0,
-      pressure_psi: toNum(r.pressure_psi) ?? 0,
-      hc_flow_mg_s: toNum(r.hc_flow_mg_s) ?? 0,
-      o2_flow_mg_s: toNum(r.o2_flow_mg_s),
-      tad_k: toNum(r.tad_k),
-      zst: toNum(r.zst),
-      tfp: toBool(r.tfp),
-      ignition_type: r.ignition_type ?? 'none',
-      ignited: toBool(r.ignited),
-      outcome: r.outcome ?? 'no_ignition',
-      burn_time_s: toNum(r.burn_time_s),
-      cool_flame: toBool(r.cool_flame),
-      cool_flame_code: toStr(r.cool_flame_code),
-      peak_burner_temp_c: toNum(r.peak_burner_temp_c),
-      peak_burner_temp_k: toNum(r.peak_burner_temp_k),
-      flame_color: toStr(r.flame_color),
-      hit_burner_temp_limit: toBool(r.hit_burner_temp_limit),
-      quality_notes: toStr(r.quality_notes),
-      comments: toStr(r.comments),
-      _arquivo: r._arquivo ?? '',
-    };
-  });
-
-  let maxPeakTempC = -Infinity;
-  let maxPeakTempK = 0;
-  let maxPeakTempTestId = '';
-  let minPressureBar = Infinity;
-  let maxPressureBar = -Infinity;
-  let minPressurePsi = Infinity;
-  let maxPressurePsi = -Infinity;
-  let longestBurnS = -1;
-  let longestBurnTestId = '';
-
-  const fuelSet = new Set<string>();
-
-  for (const t of tests) {
-    if (t.fuel) fuelSet.add(t.fuel);
-    if (t.peak_burner_temp_c !== null && t.peak_burner_temp_c > maxPeakTempC) {
-      maxPeakTempC = t.peak_burner_temp_c;
-      maxPeakTempK = t.peak_burner_temp_k ?? t.peak_burner_temp_c + 273.15;
-      maxPeakTempTestId = t.test_id;
-    }
-    if (t.pressure_bar < minPressureBar) minPressureBar = t.pressure_bar;
-    if (t.pressure_bar > maxPressureBar) maxPressureBar = t.pressure_bar;
-    if (t.pressure_psi < minPressurePsi) minPressurePsi = t.pressure_psi;
-    if (t.pressure_psi > maxPressurePsi) maxPressurePsi = t.pressure_psi;
-    if (t.burn_time_s !== null && t.burn_time_s > longestBurnS) {
-      longestBurnS = t.burn_time_s;
-      longestBurnTestId = t.test_id;
-    }
-  }
-
-  const summary: Psi159Summary = {
-    totalTests: tests.length,
-    normalCount: tests.filter((t) => t.flame_type === 'normal').length,
-    inverseCount: tests.filter((t) => t.flame_type === 'inverse').length,
-    ignitedCount: tests.filter((t) => t.ignited).length,
-    coolFlameCount: tests.filter((t) => t.cool_flame).length,
-    coolFlameOnlyCount: tests.filter((t) => t.outcome === 'cool_flame_only').length,
-    tempLimitCount: tests.filter((t) => t.hit_burner_temp_limit).length,
-    maxPeakTempC,
-    maxPeakTempK,
-    maxPeakTempTestId,
-    minPressureBar,
-    maxPressureBar,
-    minPressurePsi,
-    maxPressurePsi,
-    longestBurnS,
-    longestBurnTestId,
-    fuels: Array.from(fuelSet),
-  };
-
-  return { tests, dictionary, summary };
-}
-
-const dataset = loadDataset();
+const dataset = parsePsi159Dataset(rawDictionaryCsv, rawDataCsv);
 const validTestIds = dataset.tests.map((t) => t.test_id);
 const sortedTestIdsByLength = [...validTestIds].sort((a, b) => b.length - a.length);
 
@@ -304,6 +121,281 @@ function localizedServerError(
     case 'quiz_lang_mismatch':
       return `O quiz gerado não correspondeu ao idioma ativo (${detail}). Tente novamente.`;
   }
+}
+
+function isQuotaExceededError(err: unknown): boolean {
+  const raw = err instanceof Error ? err.message : String(err ?? '');
+  return (
+    raw.includes('429') ||
+    raw.includes('RESOURCE_EXHAUSTED') ||
+    /exceeded your current quota/i.test(raw) ||
+    /rate[- ]limit/i.test(raw)
+  );
+}
+
+function extractRetryHint(raw: string): string | null {
+  const retryInMatch = raw.match(/Please retry in\s+([0-9]+h[0-9]+m|[0-9]+m[0-9]+s|[0-9]+(?:\.[0-9]+)?s)/i);
+  if (retryInMatch?.[1]) {
+    return retryInMatch[1].replace(/\.[0-9]+s$/, 's');
+  }
+  const delayMatch = raw.match(/"retryDelay"\s*:\s*"([^"]+)"/i);
+  if (delayMatch?.[1]) return delayMatch[1];
+  return null;
+}
+
+function sanitizeErrorDetail(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed) as {
+        error?: { message?: string };
+        message?: string;
+      };
+      const msg = parsed?.error?.message ?? parsed?.message;
+      if (msg) return msg.split('\n')[0].trim();
+    } catch {
+      // ignore parse failure
+    }
+  }
+  return trimmed.split('\n')[0].slice(0, 180);
+}
+
+function formatGeminiErrorMessage(
+  lang: ApiLanguageCode,
+  err: unknown,
+  kind: 'chat_failed' | 'quiz_failed'
+): string {
+  const raw = err instanceof Error ? err.message : String(err ?? '');
+  if (isQuotaExceededError(err)) {
+    const retry = extractRetryHint(raw);
+    if (lang === 'en') {
+      return retry
+        ? `The AI service reached its temporary request limit (429). Please wait (${retry}) or check your Gemini API quota and try again.`
+        : 'The AI service reached its temporary request limit (429). Please wait a moment or check your Gemini API quota and try again.';
+    }
+    if (lang === 'es') {
+      return retry
+        ? `El servicio de IA alcanzó su límite temporal de solicitudes (429). Espera (${retry}) o revisa la cuota de la API Gemini e inténtalo de nuevo.`
+        : 'El servicio de IA alcanzó su límite temporal de solicitudes (429). Espera unos instantes o revisa la cuota de la API Gemini e inténtalo de nuevo.';
+    }
+    return retry
+      ? `O limite temporário de requisições da IA foi atingido (429). Aguarde (${retry}) ou verifique a cota da API Gemini e tente novamente.`
+      : 'O limite temporário de requisições da IA foi atingido (429). Aguarde alguns instantes ou verifique a cota da API Gemini e tente novamente.';
+  }
+  return localizedServerError(lang, kind, sanitizeErrorDetail(raw));
+}
+
+const QUIZ_CACHE_TTL_MS = 30 * 60 * 1000;
+const quizServerCache = new Map<
+  string,
+  { questions: QuizQuestion[]; createdAt: number }
+>();
+
+function formatFuelForQuiz(fuel: string, lang: ApiLanguageCode): string {
+  const f = fuel.toLowerCase();
+  if (f === 'ethane') return lang === 'en' ? 'Ethane' : 'Etano';
+  if (f === 'propane') return lang === 'en' ? 'Propane' : 'Propano';
+  if (f === 'butane') return lang === 'en' ? 'Butane' : 'Butano';
+  return fuel;
+}
+
+function formatFlameForQuiz(flame: string, lang: ApiLanguageCode): string {
+  if (flame === 'inverse') {
+    return lang === 'en' ? 'Inverse flame' : lang === 'es' ? 'Llama inversa' : 'Chama inversa';
+  }
+  return lang === 'en' ? 'Normal flame' : lang === 'es' ? 'Llama normal' : 'Chama normal';
+}
+
+function buildFallbackQuizFromDataset(
+  lang: ApiLanguageCode,
+  sampleTests: Psi159Test[]
+): QuizQuestion[] {
+  const pool = sampleTests.length >= 3 ? sampleTests : dataset.tests;
+  const withPeak = pool
+    .filter((t) => t.peak_burner_temp_c !== null)
+    .sort((a, b) => (b.peak_burner_temp_c ?? -999) - (a.peak_burner_temp_c ?? -999));
+  const peakTop = withPeak[0] ?? dataset.tests.find((t) => t.test_id === dataset.summary.maxPeakTempTestId) ?? dataset.tests[0];
+  const peakAlt1 = withPeak[Math.min(3, Math.max(0, withPeak.length - 1))] ?? dataset.tests[1];
+  const peakAlt2 = withPeak[Math.min(7, Math.max(0, withPeak.length - 1))] ?? dataset.tests[2];
+
+  const withBurn = pool
+    .filter((t) => t.burn_time_s !== null && t.burn_time_s > 0)
+    .sort((a, b) => (b.burn_time_s ?? -1) - (a.burn_time_s ?? -1));
+  const burnTop = withBurn[0] ?? dataset.tests.find((t) => t.test_id === dataset.summary.longestBurnTestId) ?? dataset.tests[0];
+
+  const coolCandidate =
+    pool.find((t) => t.cool_flame && t.o2_fraction >= 0.3 && t.pressure_psi <= 10.2) ??
+    pool.find((t) => t.cool_flame) ??
+    dataset.tests.find((t) => t.cool_flame) ??
+    pool[0];
+
+  const peakVal = (peakTop.peak_burner_temp_c ?? dataset.summary.maxPeakTempC).toFixed(1);
+  const burnVal = (burnTop.burn_time_s ?? dataset.summary.longestBurnS).toFixed(1);
+  const coolO2 = Math.round(coolCandidate.o2_fraction * 100);
+  const coolPsi = coolCandidate.pressure_psi.toFixed(1);
+
+  if (lang === 'en') {
+    const q1Opts = Array.from(
+      new Set([
+        `${peakTop.test_id} (${peakVal} °C)`,
+        `${peakAlt1.test_id} (${(peakAlt1.peak_burner_temp_c ?? 210).toFixed(1)} °C)`,
+        `${peakAlt2.test_id} (${(peakAlt2.peak_burner_temp_c ?? 140).toFixed(1)} °C)`,
+        '21167 A1 (48.0 °C)',
+      ])
+    ).slice(0, 4);
+    while (q1Opts.length < 4) q1Opts.push(`Sample #${q1Opts.length + 1} (95.0 °C)`);
+
+    return [
+      {
+        question: `In the active PSI-159 selection, which Test ID reached the highest peak burner temperature (${peakVal} °C)?`,
+        options: q1Opts,
+        correctIndex: 0,
+        hint: `Look for the ${formatFuelForQuiz(peakTop.fuel, 'en')} (${formatFlameForQuiz(peakTop.flame_type, 'en')}) test near the top of the thermal chart.`,
+        explanation: `Test ID ${peakTop.test_id} (${formatFuelForQuiz(peakTop.fuel, 'en')}, ${formatFlameForQuiz(peakTop.flame_type, 'en')}) hit ${peakVal} °C at ${Math.round(peakTop.o2_fraction * 100)}% O₂ and ${peakTop.pressure_psi.toFixed(1)} psi — like turning a stove burner up before its safety thermal shutoff (TFP / thermal limit).`,
+        correctFeedback: `Spot on! Test ID ${peakTop.test_id} reached ${peakVal} °C.`,
+        incorrectFeedback: `Not quite — Test ID ${peakTop.test_id} recorded the peak of ${peakVal} °C in this selection.`,
+        testIdRef: peakTop.test_id,
+      },
+      {
+        question: `Which Test ID sustained a microgravity flame the longest (${burnVal} s) in the current selection?`,
+        options: [
+          `Test ID ${burnTop.test_id} (${formatFuelForQuiz(burnTop.fuel, 'en')})`,
+          'A standard Earth candle flame (0.5 s)',
+          'An unignited test with 0.0 s burn time',
+          'A brief flash-only ignition (< 1 s)',
+        ],
+        correctIndex: 0,
+        hint: `Without hot air rising in microgravity, steady diffusion keeps ${formatFuelForQuiz(burnTop.fuel, 'en')} burning near the porous sphere.`,
+        explanation: `In Test ID ${burnTop.test_id}, ${formatFuelForQuiz(burnTop.fuel, 'en')} burned for ${burnVal} s at ${Math.round(burnTop.o2_fraction * 100)}% O₂ and ${burnTop.pressure_psi.toFixed(1)} psi. In space, spherical diffusion feeds the flame steadily instead of flickering away like on Earth.`,
+        correctFeedback: `Correct! Test ID ${burnTop.test_id} burned for ${burnVal} s.`,
+        incorrectFeedback: `Actually, Test ID ${burnTop.test_id} sustained combustion for ${burnVal} s.`,
+        testIdRef: burnTop.test_id,
+      },
+      {
+        question: `Why is a cool flame like Test ID ${coolCandidate.test_id} (${coolO2}% O₂, ${coolPsi} psi) a concern for Lunar Base safety (O₂ ≥ 30%, P ≤ 10.2 psi)?`,
+        options: [
+          'It releases toxic smoke and low-visibility ~200–400 °C heat that can evade standard sensors',
+          'It instantly freezes the spacecraft hull below 0 °C',
+          'It only occurs at Earth sea-level pressure (14.7 psi) and never below 12 psi',
+          'It immediately extinguishes all oxygen in the habitat within milliseconds',
+        ],
+        correctIndex: 0,
+        hint: 'Think of engine knock pre-ignition: faint blue glow and moderate temperature, yet reactive and hazardous.',
+        explanation: `Test ID ${coolCandidate.test_id} produced a confirmed cool flame at ${coolO2}% O₂ and ${coolPsi} psi. Like invisible pre-ignition inside a car engine, cool flames burn dimly (~200–400 °C) and can transition into hot flames in enriched Lunar habitats.`,
+        correctFeedback: 'Exactly right! Low visibility and enriched O₂ make detection critical.',
+        incorrectFeedback: 'Cool flames burn dimly (~200–400 °C) and are hard to spot with standard optical fire detectors.',
+        testIdRef: coolCandidate.test_id,
+      },
+    ];
+  }
+
+  if (lang === 'es') {
+    const q1Opts = Array.from(
+      new Set([
+        `${peakTop.test_id} (${peakVal} °C)`,
+        `${peakAlt1.test_id} (${(peakAlt1.peak_burner_temp_c ?? 210).toFixed(1)} °C)`,
+        `${peakAlt2.test_id} (${(peakAlt2.peak_burner_temp_c ?? 140).toFixed(1)} °C)`,
+        '21167 A1 (48.0 °C)',
+      ])
+    ).slice(0, 4);
+    while (q1Opts.length < 4) q1Opts.push(`Muestra #${q1Opts.length + 1} (95.0 °C)`);
+
+    return [
+      {
+        question: `En la selección actual de PSI-159, ¿qué Test ID alcanzó la mayor temperatura pico en el quemador (${peakVal} °C)?`,
+        options: q1Opts,
+        correctIndex: 0,
+        hint: `Busca el ensayo de ${formatFuelForQuiz(peakTop.fuel, 'es')} (${formatFlameForQuiz(peakTop.flame_type, 'es')}) en la parte superior del gráfico térmico.`,
+        explanation: `El Test ID ${peakTop.test_id} (${formatFuelForQuiz(peakTop.fuel, 'es')}, ${formatFlameForQuiz(peakTop.flame_type, 'es')}) alcanzó ${peakVal} °C con ${Math.round(peakTop.o2_fraction * 100)}% de O₂ y ${peakTop.pressure_psi.toFixed(1)} psi — como subir la hornalla al máximo antes de que salte el corte de seguridad.`,
+        correctFeedback: `¡Exacto! El Test ID ${peakTop.test_id} alcanzó ${peakVal} °C.`,
+        incorrectFeedback: `Casi — el Test ID ${peakTop.test_id} registró el pico máximo de ${peakVal} °C en esta selección.`,
+        testIdRef: peakTop.test_id,
+      },
+      {
+        question: `¿Qué Test ID mantuvo la llama encendida durante más tiempo (${burnVal} s) en microgravedad dentro de la selección actual?`,
+        options: [
+          `Test ID ${burnTop.test_id} (${formatFuelForQuiz(burnTop.fuel, 'es')})`,
+          'Una llama común de vela en Tierra (0,5 s)',
+          'Un ensayo sin ignición con 0,0 s de duración',
+          'Un destello breve que se apaga en menos de 1 s',
+        ],
+        correctIndex: 0,
+        hint: `Sin aire caliente subiendo en microgravedad, la difusión estable mantiene el ${formatFuelForQuiz(burnTop.fuel, 'es')} encendido.`,
+        explanation: `En el Test ID ${burnTop.test_id}, el ${formatFuelForQuiz(burnTop.fuel, 'es')} ardió durante ${burnVal} s con ${Math.round(burnTop.o2_fraction * 100)}% de O₂ y ${burnTop.pressure_psi.toFixed(1)} psi. En el espacio la difusión esférica alimenta la llama de forma continua.`,
+        correctFeedback: `¡Correcto! El Test ID ${burnTop.test_id} duró ${burnVal} s.`,
+        incorrectFeedback: `En realidad, el Test ID ${burnTop.test_id} sostuvo la combustión durante ${burnVal} s.`,
+        testIdRef: burnTop.test_id,
+      },
+      {
+        question: `¿Por qué una llama fría como la del Test ID ${coolCandidate.test_id} (${coolO2}% O₂, ${coolPsi} psi) preocupa para la seguridad en la Base Lunar (O₂ ≥ 30%, P ≤ 10,2 psi)?`,
+        options: [
+          'Arde a baja luminosidad (~200–400 °C) y puede pasar desapercibida para sensores ópticos comunes',
+          'Congela instantáneamente el casco de la nave por debajo de 0 °C',
+          'Solo ocurre a presión terrestre (14,7 psi) y nunca por debajo de 12 psi',
+          'Consume todo el oxígeno del hábitat en milisegundos sin generar calor',
+        ],
+        correctIndex: 0,
+        hint: 'Piensa en la preignición o picado dentro del motor de un auto: llama tenue, pero químicamente activa.',
+        explanation: `El Test ID ${coolCandidate.test_id} generó una llama fría confirmada con ${coolO2}% de O₂ y ${coolPsi} psi. Como una combustión oculta en el motor, emite poca luz (~200–400 °C) y puede reactivarse en atmósferas lunares ricas en oxígeno.`,
+        correctFeedback: '¡Muy bien! Su baja visibilidad y el exceso de O₂ exigen detección específica.',
+        incorrectFeedback: 'Las llamas frías arden con brillo mínimo (~200–400 °C) y dificultan la detección temprana.',
+        testIdRef: coolCandidate.test_id,
+      },
+    ];
+  }
+
+  const q1Opts = Array.from(
+    new Set([
+      `${peakTop.test_id} (${peakVal} °C)`,
+      `${peakAlt1.test_id} (${(peakAlt1.peak_burner_temp_c ?? 210).toFixed(1)} °C)`,
+      `${peakAlt2.test_id} (${(peakAlt2.peak_burner_temp_c ?? 140).toFixed(1)} °C)`,
+      '21167 A1 (48.0 °C)',
+    ])
+  ).slice(0, 4);
+  while (q1Opts.length < 4) q1Opts.push(`Amostra #${q1Opts.length + 1} (95.0 °C)`);
+
+  return [
+    {
+      question: `Na seleção atual do PSI-159, qual Test ID atingiu a maior temperatura de pico no queimador (${peakVal} °C)?`,
+      options: q1Opts,
+      correctIndex: 0,
+      hint: `Procure o ensaio de ${formatFuelForQuiz(peakTop.fuel, 'pt-BR')} (${formatFlameForQuiz(peakTop.flame_type, 'pt-BR')}) no topo do gráfico térmico.`,
+      explanation: `O Test ID ${peakTop.test_id} (${formatFuelForQuiz(peakTop.fuel, 'pt-BR')}, ${formatFlameForQuiz(peakTop.flame_type, 'pt-BR')}) chegou a ${peakVal} °C com ${Math.round(peakTop.o2_fraction * 100)}% de O₂ e ${peakTop.pressure_psi.toFixed(1)} psi — como abrir o bico do fogão até acionar o corte térmico de segurança.`,
+      correctFeedback: `Acertou! O Test ID ${peakTop.test_id} atingiu ${peakVal} °C.`,
+      incorrectFeedback: `Quase — o Test ID ${peakTop.test_id} registrou o pico máximo de ${peakVal} °C nesta seleção.`,
+      testIdRef: peakTop.test_id,
+    },
+    {
+      question: `Qual Test ID manteve a chama acesa por mais tempo (${burnVal} s) em microgravidade na seleção atual?`,
+      options: [
+        `Test ID ${burnTop.test_id} (${formatFuelForQuiz(burnTop.fuel, 'pt-BR')})`,
+        'Uma chama comum de vela na Terra (0,5 s)',
+        'Um ensaio sem ignição com 0,0 s de queima',
+        'Um clarão rápido que apaga em menos de 1 s',
+      ],
+      correctIndex: 0,
+      hint: `Sem o ar quente subindo na microgravidade, a difusão estável sustenta a queima de ${formatFuelForQuiz(burnTop.fuel, 'pt-BR')}.`,
+      explanation: `No Test ID ${burnTop.test_id}, o ${formatFuelForQuiz(burnTop.fuel, 'pt-BR')} queimou por ${burnVal} s a ${Math.round(burnTop.o2_fraction * 100)}% de O₂ e ${burnTop.pressure_psi.toFixed(1)} psi. No espaço, a difusão esférica alimenta a chama continuamente.`,
+      correctFeedback: `Isso mesmo! O Test ID ${burnTop.test_id} durou ${burnVal} s.`,
+      incorrectFeedback: `Na verdade, o Test ID ${burnTop.test_id} sustentou a chama por ${burnVal} s.`,
+      testIdRef: burnTop.test_id,
+    },
+    {
+      question: `Por que uma chama fria como a do Test ID ${coolCandidate.test_id} (${coolO2}% O₂, ${coolPsi} psi) preocupa na segurança da Base Lunar (O₂ ≥ 30%, P ≤ 10,2 psi)?`,
+      options: [
+        'Queima quase invisível (~200–400 °C) e pode passar despercebida por detectores ópticos comuns',
+        'Congela instantaneamente a parede da nave abaixo de 0 °C',
+        'Só acontece ao nível do mar na Terra (14,7 psi) e nunca abaixo de 12 psi',
+        'Consome todo o oxigênio do módulo em milissegundos sem gerar calor',
+      ],
+      correctIndex: 0,
+      hint: 'Lembre da pré-ignição ("batida de pino") no motor do carro: brilho fraco, mas reação ativa.',
+      explanation: `O Test ID ${coolCandidate.test_id} produziu chama fria confirmada a ${coolO2}% de O₂ e ${coolPsi} psi. Como a pré-ignição oculta num motor, ela brilha pouco (~200–400 °C) e pode evoluir em habitats lunares ricos em O₂.`,
+      correctFeedback: 'Exato! Baixa luminosidade e O₂ elevado exigem sensores dedicados.',
+      incorrectFeedback: 'Chamas frias queimam com brilho fraco (~200–400 °C) e são difíceis de detectar cedo.',
+      testIdRef: coolCandidate.test_id,
+    },
+  ];
 }
 
 function buildSystemInstruction(
@@ -494,15 +586,15 @@ async function startServer() {
       );
       res.end();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error('Erro no streaming /api/assistant/chat:', message);
+      const friendlyMessage = formatGeminiErrorMessage(targetLang, err, 'chat_failed');
+      console.error('Erro no streaming /api/assistant/chat:', err);
       if (!res.headersSent) {
-        res.status(500).json({
-          error: localizedServerError(targetLang, 'chat_failed', message),
+        res.status(isQuotaExceededError(err) ? 429 : 500).json({
+          error: friendlyMessage,
         });
       } else {
         res.write(
-          `data: ${JSON.stringify({ type: 'error', error: message })}\n\n`
+          `data: ${JSON.stringify({ type: 'error', error: friendlyMessage })}\n\n`
         );
         res.end();
       }
@@ -512,18 +604,38 @@ async function startServer() {
   app.post('/api/assistant/quiz', async (req, res) => {
     const body = (req.body ?? {}) as {
       lang?: string;
+      forceRefresh?: boolean;
       filtersSummary?: string;
       kpisSummary?: string;
       sampleTests?: Psi159Test[];
     };
     const targetLang = normalizeApiLanguage(body.lang);
     const languageName = getLanguageName(targetLang);
+    const filtersKey = (body.filtersSummary ?? 'default').trim();
+    const cacheKey = `${targetLang}::${filtersKey}`;
+    const sampleTests = Array.isArray(body.sampleTests) ? body.sampleTests : [];
+
+    const cached = quizServerCache.get(cacheKey);
+    if (
+      !body.forceRefresh &&
+      cached &&
+      Date.now() - cached.createdAt < QUIZ_CACHE_TTL_MS
+    ) {
+      res.json({
+        language: targetLang,
+        questions: cached.questions,
+        source: 'cache',
+      });
+      return;
+    }
 
     try {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
-        res.status(500).json({
-          error: localizedServerError(targetLang, 'missing_key'),
+        res.json({
+          language: targetLang,
+          questions: buildFallbackQuizFromDataset(targetLang, sampleTests),
+          source: 'fallback',
         });
         return;
       }
@@ -644,11 +756,34 @@ Requirements:
         return;
       }
 
-      res.json({ language: returnedLang, questions: parsed.questions });
+      quizServerCache.set(cacheKey, {
+        questions: parsed.questions,
+        createdAt: Date.now(),
+      });
+      res.json({
+        language: returnedLang,
+        questions: parsed.questions,
+        source: 'ai',
+      });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
+      if (isQuotaExceededError(err)) {
+        if (cached && cached.questions.length > 0) {
+          res.json({
+            language: targetLang,
+            questions: cached.questions,
+            source: 'cache',
+          });
+          return;
+        }
+        res.json({
+          language: targetLang,
+          questions: buildFallbackQuizFromDataset(targetLang, sampleTests),
+          source: 'fallback',
+        });
+        return;
+      }
       res.status(500).json({
-        error: localizedServerError(targetLang, 'quiz_failed', message),
+        error: formatGeminiErrorMessage(targetLang, err, 'quiz_failed'),
       });
     }
   });

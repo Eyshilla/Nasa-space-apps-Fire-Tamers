@@ -189,6 +189,7 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
   const [quizFinished, setQuizFinished] = useState(false);
   const [quizError, setQuizError] = useState<string | null>(null);
   const [quizLangChangedNotice, setQuizLangChangedNotice] = useState(false);
+  const [quizSource, setQuizSource] = useState<'ai' | 'cache' | 'fallback' | null>(null);
   const [fabRetracted, setFabRetracted] = useState(false);
 
   useEffect(() => {
@@ -400,6 +401,7 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
       setQuizError(null);
       setQuizFinished(false);
       setQuizLangChangedNotice(false);
+      setQuizSource(null);
 
       const userMsg: ChatMessage = {
         id: `u-${Date.now()}`,
@@ -528,6 +530,7 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
       const cacheKey = `${apiLang}::${filtersSummary}`;
 
       setQuizError(null);
+      setQuizSource(null);
       setQuizSelectedOption({});
       setQuizVerified({});
       setQuizShowHint({});
@@ -539,6 +542,7 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
         if (cached && cached.length > 0) {
           setQuizLang(lang);
           setQuizQuestions(cached);
+          setQuizSource('cache');
           setQuizLoading(false);
           return;
         }
@@ -555,6 +559,7 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             lang: apiLang,
+            forceRefresh,
             filtersSummary,
             kpisSummary,
             sampleTests: filteredTests.slice(0, 25),
@@ -569,6 +574,7 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
         const data = (await res.json()) as {
           language?: string;
           questions: QuizQuestion[];
+          source?: 'ai' | 'cache' | 'fallback';
         };
         if (quizRequestIdRef.current !== requestId) return;
         if (
@@ -578,9 +584,12 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
         ) {
           throw new Error(tStr.ai.quizErrorFallback);
         }
-        quizCacheRef.current.set(cacheKey, data.questions);
+        if (data.source !== 'fallback') {
+          quizCacheRef.current.set(cacheKey, data.questions);
+        }
         setQuizLang(lang);
         setQuizQuestions(data.questions);
+        setQuizSource(data.source ?? 'ai');
       } catch (err: unknown) {
         if (quizRequestIdRef.current !== requestId) return;
         setQuizError(
@@ -610,7 +619,7 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
     setQuizFinished(false);
   }, []);
 
-  // When switching language while a quiz is active, clear old questions, show notice, and regenerate in new language
+  // When switching language while a quiz is open, clear old questions and prompt the user instead of auto-calling the API
   useEffect(() => {
     const hasQuizOpen =
       quizQuestions !== null ||
@@ -618,6 +627,9 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
       quizFinished ||
       quizError !== null;
     if (hasQuizOpen && quizLang && quizLang !== lang) {
+      quizRequestIdRef.current += 1;
+      setQuizLang(lang);
+      setQuizLoading(false);
       setQuizQuestions(null);
       setQuizSelectedOption({});
       setQuizVerified({});
@@ -625,10 +637,10 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
       setQuizCurrentIdx(0);
       setQuizFinished(false);
       setQuizError(null);
+      setQuizSource(null);
       setQuizLangChangedNotice(true);
-      void startQuiz(true);
     }
-  }, [lang, quizLang, quizQuestions, quizLoading, quizFinished, quizError, startQuiz]);
+  }, [lang, quizLang, quizQuestions, quizLoading, quizFinished, quizError]);
 
   useEffect(() => {
     if (
@@ -663,9 +675,8 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
         <div
           style={{
             zIndex: 'var(--z-chat)',
-            bottom: 'max(1rem, calc(env(safe-area-inset-bottom) + 0.75rem))',
           }}
-          className={`group/fab fixed right-4 flex items-center gap-2.5 transition-all duration-300 ${
+          className={`group/fab fixed bottom-[4.25rem] right-3 md:bottom-4 md:right-4 flex items-center gap-2.5 transition-all duration-300 ${
             fabRetracted
               ? 'translate-y-4 scale-75 opacity-35 hover:translate-y-0 hover:scale-100 hover:opacity-100'
               : 'translate-y-0 scale-100 opacity-100'
@@ -832,6 +843,7 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
               {messages.length === 0 &&
                 !quizQuestions &&
                 !quizLoading &&
+                !quizError &&
                 !quizLangChangedNotice && (
                 <div className="space-y-3">
                   <div className="wrap-anywhere rounded-lg border border-slate-800 bg-[#121A30] p-3 text-xs text-slate-300">
@@ -934,7 +946,7 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
                     disabled={quizLoading}
                     onClick={() => {
                       setQuizLangChangedNotice(false);
-                      void startQuiz(true);
+                      void startQuiz(false);
                     }}
                     className="inline-flex items-center gap-1 whitespace-nowrap rounded border border-cyan-400/50 bg-cyan-500/20 px-2 py-0.5 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-500/30 disabled:opacity-50"
                   >
@@ -958,6 +970,11 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
 
               {quizQuestions && quizQuestions.length > 0 && (
                 <div className="space-y-3">
+                  {quizSource === 'fallback' && (
+                    <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-200">
+                      {tStr.ai.quizOfflineFallbackNotice}
+                    </div>
+                  )}
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-emerald-300">

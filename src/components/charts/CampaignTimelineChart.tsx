@@ -1,10 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Bar,
   CartesianGrid,
   ComposedChart,
   Line,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -12,8 +11,14 @@ import {
 import { usePsiStore } from '../../store/usePsiStore';
 import type { Psi159Test } from '../../types/psi159';
 import { useStrings } from '../../utils/i18n';
-import { useChartTypography } from '../../utils/useChartTypography';
+import {
+  measureTextWidth,
+  useChartTypography,
+} from '../../utils/useChartTypography';
 import { ChartCard, type ChartLegendItem } from '../ChartCard';
+import { useChartHost, useIsChartExpanded } from '../ChartHostContext';
+import { SafeResponsiveContainer } from '../SafeResponsiveContainer';
+import { ClickableChartTooltip } from './ClickableChartTooltip';
 
 interface CampaignTimelineChartProps {
   tests: Psi159Test[];
@@ -29,21 +34,10 @@ export const CampaignTimelineChart: React.FC<CampaignTimelineChartProps> = ({
   const tStr = useStrings(lang);
   const typo = useChartTypography();
 
-  const boxRef = useRef<HTMLDivElement | null>(null);
+  const host = useChartHost();
+  const isExpanded = useIsChartExpanded();
   const [boxWidth, setBoxWidth] = useState(340);
-
-  useEffect(() => {
-    const el = boxRef.current;
-    if (!el) return;
-    const measure = () => {
-      const w = el.clientWidth;
-      if (w > 0) setBoxWidth(Math.round(w));
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [loading, tests.length]);
+  const compactMinH = host?.fillHeight && !isExpanded ? 185 : 240;
 
   const data = useMemo(() => {
     const days = Array.from({ length: 12 }, (_, idx) => idx + 1);
@@ -91,31 +85,47 @@ export const CampaignTimelineChart: React.FC<CampaignTimelineChartProps> = ({
       title={tStr.timelineChart.title}
       subtitle={tStr.timelineChart.subtitle}
       helpTitle={tStr.timelineChart.title}
-      helpBody="Os 333 ensaios do PSI-159 foram executados ao longo de 12 dias na câmara CFI-G. Clique em qualquer dia para filtrar os outros gráficos."
+      helpBody={tStr.timelineChart.helpTip}
       chartContextPrompt={tStr.prompts.explainTimeline}
       chartContextLabel={tStr.timelineChart.title}
       legend={legendItems}
-      footer={<span>{tStr.timelineChart.hintClick}</span>}
       isEmpty={tests.length === 0}
       loading={loading}
     >
-      <div ref={boxRef} className="h-full w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart
-            data={data}
-            margin={{ top: 8, right: 6, left: 2, bottom: 8 }}
-          >
+      <SafeResponsiveContainer
+        minHeight={compactMinH}
+        fallbackWidth={340}
+        onMeasureWidth={(w) => setBoxWidth((prev) => (prev === w ? prev : w))}
+      >
+        {(() => {
+          const leftW = Math.ceil(
+            measureTextWidth('80', typo.axisFontSize, '500', 'mono') + 14
+          );
+          const rightW = Math.ceil(
+            measureTextWidth('650', typo.axisFontSize, '500', 'mono') + 14
+          );
+          const plotW = Math.max(120, boxWidth - leftW - rightW - 12);
+          const dayTickW =
+            measureTextWidth('D12', typo.axisFontSize, '500') + 10;
+          const xInterval =
+            plotW / 12 >= dayTickW ? 0 : plotW / 6 >= dayTickW ? 1 : 2;
+          return (
+            <ComposedChart
+              data={data}
+              margin={{ top: 8, right: 6, left: 4, bottom: 10 }}
+            >
             <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
             <XAxis
               dataKey="dayLabel"
-              interval={boxWidth < 330 ? 1 : 0}
+              interval={xInterval}
+              height={Math.ceil(typo.axisFontSize * 1.55 + 10)}
               tick={{ fill: typo.tickColor, fontSize: typo.axisFontSize }}
               axisLine={{ stroke: '#334155' }}
               tickLine={false}
             />
             <YAxis
               yAxisId="left"
-              width={typo.isLargeScreen ? 36 : 30}
+              width={leftW}
               tick={{ fill: typo.tickColor, fontSize: typo.axisFontSize }}
               axisLine={false}
               tickLine={false}
@@ -126,24 +136,19 @@ export const CampaignTimelineChart: React.FC<CampaignTimelineChartProps> = ({
               tick={{ fill: '#FBBF24', fontSize: typo.axisFontSize }}
               axisLine={false}
               tickLine={false}
-              width={typo.isLargeScreen ? 44 : 36}
+              width={rightW}
             />
             <Tooltip
               cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
-              contentStyle={{
-                backgroundColor: '#0B1020',
-                border: '1px solid #334155',
-                borderRadius: '8px',
-                fontSize: '11px',
-                color: '#F1F5F9',
-              }}
+              content={<ClickableChartTooltip hintText={tStr.chartCard.clickToFilter} />}
             />
             <Bar
               yAxisId="left"
               dataKey="count"
               name={tStr.timelineChart.tests}
               fill="#06B6D4"
-              fillOpacity={0.75}
+              fillOpacity={0.78}
+              activeBar={{ fillOpacity: 1, stroke: '#F8FAFC', strokeWidth: 1.5 }}
               radius={[3, 3, 0, 0]}
               className="cursor-pointer"
               onClick={(entry) => {
@@ -168,9 +173,10 @@ export const CampaignTimelineChart: React.FC<CampaignTimelineChartProps> = ({
               strokeWidth={2}
               dot={{ r: 2.5, fill: '#F59E0B' }}
             />
-          </ComposedChart>
-        </ResponsiveContainer>
-      </div>
+            </ComposedChart>
+          );
+        })()}
+      </SafeResponsiveContainer>
     </ChartCard>
   );
 };

@@ -1,4 +1,5 @@
 export type AppLanguage = 'pt' | 'en' | 'es';
+export type ChartFontScaleLevel = 'normal' | 'large' | 'xlarge';
 
 export interface Psi159Test {
   investigation: string;
@@ -77,10 +78,18 @@ export interface Psi159DatasetResponse {
 
 export type DashboardTab =
   | 'overview'
+  | 'analyses'
   | 'ignition'
   | 'cool_flames'
   | 'explore'
   | 'about';
+
+export type OverviewCardTabId =
+  | 'outcomes'
+  | 'burn'
+  | 'radar'
+  | 'timeline'
+  | 'flow';
 
 export interface CrossFilter {
   source: string;

@@ -2,22 +2,26 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Grid3X3, ScatterChart } from 'lucide-react';
 import { usePsiStore } from '../../store/usePsiStore';
 import type { Psi159Test } from '../../types/psi159';
-import { isInLunarZone } from '../../utils/analytics';
-import {
-  flameTypeLabel,
-  formatNumber,
-  fuelLabel,
-  outcomeMeta,
-  testCategoryColor,
-} from '../../utils/formatters';
+import { formatNumber, testCategoryColor } from '../../utils/formatters';
 import { useStrings } from '../../utils/i18n';
-import { useChartTypography } from '../../utils/useChartTypography';
+import {
+  measureTextWidth,
+  useChartTypography,
+} from '../../utils/useChartTypography';
 import { ChartCard, type ChartLegendItem } from '../ChartCard';
+import { useIsChartExpanded } from '../ChartHostContext';
+import {
+  PointTooltipPopover,
+  useClusterTooltip,
+  type PointTooltipAnchor,
+} from '../PointTooltipPopover';
 
 interface IgnitionMapChartProps {
   tests: Psi159Test[];
   loading?: boolean;
   tall?: boolean;
+  fillHeight?: boolean;
+  compact?: boolean;
   sharedLegendActive?: boolean;
 }
 
@@ -43,74 +47,192 @@ function testPriority(t: Psi159Test, selectedId: string): number {
   return 1;
 }
 
+interface HeatCell {
+  ix: number;
+  iy: number;
+  psi0: number;
+  psi1: number;
+  o20: number;
+  o21: number;
+  tests: Psi159Test[];
+  ignited: number;
+  coolCount: number;
+  pct: number;
+}
+
 export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
   tests,
   loading = false,
   tall = false,
+  fillHeight = false,
+  compact = false,
   sharedLegendActive = false,
 }) => {
   const [viewMode, setViewMode] = useState<'scatter' | 'heatmap'>('scatter');
-  const [hoveredCluster, setHoveredCluster] = useState<PointCluster | null>(null);
-  const [pinnedCluster, setPinnedCluster] = useState<PointCluster | null>(null);
-  const [hoveredCell, setHoveredCell] = useState<{
-    psiLabel: string;
-    o2Label: string;
-    total: number;
-    ignited: number;
-    coolCount: number;
-    pct: number;
-  } | null>(null);
+  const scatterTooltip = useClusterTooltip<PointCluster>((c) => c.id);
+  const cellTooltip = useClusterTooltip<HeatCell>((c) => `${c.ix}-${c.iy}`);
 
   const boxRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const lastPointerTypeRef = useRef<string>('mouse');
   const [size, setSize] = useState({ w: 680, h: 320 });
 
   const typo = useChartTypography();
+  const isExpanded = useIsChartExpanded();
+
+  const selectedTestId = usePsiStore((s) => s.selectedTestId);
+  const selectTest = usePsiStore((s) => s.selectTest);
+  const setCrossFilter = usePsiStore((s) => s.setCrossFilter);
+  const lang = usePsiStore((s) => s.lang);
+  const tStr = useStrings(lang);
 
   useEffect(() => {
     const el = boxRef.current;
     if (!el) return;
+    let rafId: number | null = null;
+    let attempts = 0;
+
     const measure = () => {
       const rect = el.getBoundingClientRect();
-      if (!rect.width || !rect.height) return;
-      const w = Math.max(240, Math.round(rect.width));
-      const h = Math.max(220, Math.round(rect.height));
+      if (!rect.width || !rect.height) {
+        if (attempts < 12) {
+          attempts += 1;
+          rafId = requestAnimationFrame(measure);
+        }
+        return;
+      }
+      attempts = 0;
+      const w = Math.max(220, Math.round(rect.width));
+      const h = Math.max(150, Math.round(rect.height));
       setSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
-    return () => ro.disconnect();
-  }, [loading, tests.length, tall, typo.presentationMode]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setPinnedCluster(null);
-        setHoveredCluster(null);
-      }
-    };
-    const onDocClick = (e: MouseEvent) => {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) {
-        setPinnedCluster(null);
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    document.addEventListener('mousedown', onDocClick);
     return () => {
-      window.removeEventListener('keydown', onKey);
-      document.removeEventListener('mousedown', onDocClick);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      ro.disconnect();
     };
-  }, []);
+  }, [
+    loading,
+    tests.length,
+    tall,
+    fillHeight,
+    isExpanded,
+    typo.presentationMode,
+    typo.scaleFactor,
+  ]);
 
   const W = size.w;
   const H = size.h;
-  const narrow = W < 540;
+
+  const yTickMaxW = measureTextWidth('100%', typo.axisFontSize, '500', 'mono');
+  const padLeft = Math.ceil(yTickMaxW + typo.axisTitleSize + 24);
+  const padRight = 20;
+  const padBottom = Math.ceil(typo.axisFontSize * 1.3 + typo.axisTitleSize + 22);
+  const availBadgeW = Math.max(140, W - padLeft - padRight);
+  const badgeH = Math.ceil(typo.zoneFontSize * 1.45 + 6);
+  const badgeRowGap = 5;
+
+  const zoneBadgeLayout = useMemo(() => {
+    const rawItems = [
+      {
+        id: 'lunar',
+        full: `${tStr.ignitionChart.lunarZone} (${tStr.ignitionChart.lunarSpecs})`,
+        short: tStr.ignitionChart.lunarZone,
+        fill: '#6EE7B7',
+        stroke: '#34D399',
+        fontFamily: 'sans' as const,
+        fontWeight: '600',
+      },
+      {
+        id: 'suit',
+        full: `↖ ${tStr.ignitionChart.spacesuit}`,
+        short: `↖ ${tStr.ignitionChart.spacesuit}`,
+        fill: '#7DD3FC',
+        stroke: '#38BDF8',
+        fontFamily: 'mono' as const,
+        fontWeight: '500',
+      },
+      {
+        id: 'earth',
+        full: tStr.ignitionChart.earthAir,
+        short: tStr.ignitionChart.earthShort,
+        fill: '#FDE047',
+        stroke: '#FACC15',
+        fontFamily: 'sans' as const,
+        fontWeight: '600',
+      },
+    ];
+
+    const prepared = rawItems.map((item) => {
+      const fullW =
+        measureTextWidth(item.full, typo.zoneFontSize, item.fontWeight, item.fontFamily) + 16;
+      const useShort = fullW > availBadgeW * 0.65 && item.short !== item.full;
+      const text = useShort ? item.short : item.full;
+      const textW = measureTextWidth(text, typo.zoneFontSize, item.fontWeight, item.fontFamily);
+      return {
+        ...item,
+        text,
+        bw: Math.min(availBadgeW, textW + 16),
+      };
+    });
+
+    const rows: Array<Array<(typeof prepared)[number] & { x: number; y: number }>> = [];
+    let currentRow: (typeof prepared)[number][] = [];
+    let currentW = 0;
+    const colGap = 8;
+
+    for (const item of prepared) {
+      const needed = currentRow.length === 0 ? item.bw : currentW + colGap + item.bw;
+      if (currentRow.length > 0 && needed > availBadgeW) {
+        rows.push(
+          currentRow.map((r) => ({ ...r, x: 0, y: 0 }))
+        );
+        currentRow = [item];
+        currentW = item.bw;
+      } else {
+        currentRow.push(item);
+        currentW = needed;
+      }
+    }
+    if (currentRow.length > 0) {
+      rows.push(currentRow.map((r) => ({ ...r, x: 0, y: 0 })));
+    }
+
+    const placed: Array<(typeof prepared)[number] & { x: number; y: number }> = [];
+    rows.forEach((row, rowIdx) => {
+      const y = 4 + rowIdx * (badgeH + badgeRowGap);
+      if (rowIdx === 0 && row.length === 3) {
+        // Spread: Lunar left, Suit after Lunar, Earth right-aligned
+        row[0].x = padLeft;
+        row[0].y = y;
+        row[1].x = padLeft + row[0].bw + colGap;
+        row[1].y = y;
+        row[2].x = Math.max(row[1].x + row[1].bw + colGap, W - padRight - row[2].bw);
+        row[2].y = y;
+      } else {
+        let cursorX = padLeft;
+        for (const r of row) {
+          r.x = cursorX;
+          r.y = y;
+          cursorX += r.bw + colGap;
+        }
+      }
+      placed.push(...row);
+    });
+
+    return {
+      placed,
+      padTop: rows.length * (badgeH + badgeRowGap) + 6,
+    };
+  }, [tStr, typo.zoneFontSize, availBadgeW, badgeH, padLeft, padRight, W]);
+
   const PAD = {
-    top: narrow ? 50 : 34,
-    right: 20,
-    bottom: typo.isLargeScreen ? 50 : 44,
-    left: typo.isLargeScreen ? 62 : 52,
+    top: zoneBadgeLayout.padTop,
+    right: padRight,
+    bottom: padBottom,
+    left: padLeft,
   };
   const PLOT_W = Math.max(120, W - PAD.left - PAD.right);
   const PLOT_H = Math.max(120, H - PAD.top - PAD.bottom);
@@ -122,12 +244,6 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
 
   const [brushStart, setBrushStart] = useState<{ x: number; y: number } | null>(null);
   const [brushCurr, setBrushCurr] = useState<{ x: number; y: number } | null>(null);
-
-  const selectedTestId = usePsiStore((s) => s.selectedTestId);
-  const selectTest = usePsiStore((s) => s.selectTest);
-  const setCrossFilter = usePsiStore((s) => s.setCrossFilter);
-  const lang = usePsiStore((s) => s.lang);
-  const tStr = useStrings(lang);
 
   // Cluster coincident tests (pixel distance <= 10px) so overlapping markers display a crisp count badge
   const clusters = useMemo<PointCluster[]>(() => {
@@ -232,10 +348,27 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
     return { x, y };
   };
 
+  const svgCoordsToAnchor = (
+    cx: number,
+    cy: number,
+    sizePx = 14
+  ): PointTooltipAnchor => {
+    const rect = svgRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) {
+      return { x: cx, y: cy, width: sizePx, height: sizePx };
+    }
+    return {
+      x: rect.left + (cx / W) * rect.width,
+      y: rect.top + (cy / H) * rect.height,
+      width: sizePx,
+      height: sizePx,
+    };
+  };
+
   const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
     if (viewMode !== 'scatter') return;
     if ((e.target as HTMLElement).dataset.point === 'true') return;
-    setPinnedCluster(null);
+    scatterTooltip.closeAll();
     const pt = toSvgCoords(e);
     if (!pt) return;
     if (
@@ -290,18 +423,15 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
   const earthX = xPx(14.7);
   const earthY = yPx(0.21);
 
-  const xTicks = W < 420 ? [10, 20, 30, 40] : [10, 15, 20, 25, 30, 35, 40, 45];
-  const yTicks = [0, 0.2, 0.4, 0.6, 0.8];
-
-  const lunarLabel = `${tStr.ignitionChart.lunarZone} (${tStr.ignitionChart.lunarSpecs})`;
-  const lunarDisplayText = narrow ? tStr.ignitionChart.lunarZone : lunarLabel;
-  const suitLabel = `↖ ${tStr.ignitionChart.spacesuit}`;
-  const earthLabel = tStr.ignitionChart.earthAir;
-
-  const badgeW = (txt: string) => Math.round(txt.length * 5.7 + 14);
-  const lunarBW = Math.min(PLOT_W * 0.48, badgeW(lunarDisplayText));
-  const suitBW = Math.min(PLOT_W * 0.48, badgeW(suitLabel));
-  const earthBW = Math.min(PLOT_W * 0.65, badgeW(earthLabel));
+  const xTickMinGap = measureTextWidth('45', typo.axisFontSize, '500', 'mono') + 24;
+  const xTicks =
+    PLOT_W / 8 >= xTickMinGap
+      ? [10, 15, 20, 25, 30, 35, 40, 45]
+      : PLOT_W / 4 >= xTickMinGap
+        ? [10, 20, 30, 40]
+        : [10, 25, 40];
+  const yTicks =
+    PLOT_H < typo.axisFontSize * 7.5 ? [0, 0.4, 0.8] : [0, 0.2, 0.4, 0.6, 0.8];
 
   const legendItems: ChartLegendItem[] = useMemo(() => {
     if (sharedLegendActive) {
@@ -359,8 +489,8 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
     ];
   }, [sharedLegendActive, tStr]);
 
-  // Active transient tooltip (hover takes precedence unless user clicked to inspect a cluster; never fixed permanently)
-  const activeCluster = hoveredCluster ?? pinnedCluster;
+  const activeCluster = scatterTooltip.active?.data ?? null;
+  const activeCell = cellTooltip.active?.data ?? null;
 
   return (
     <ChartCard
@@ -368,19 +498,14 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
       title={tStr.ignitionChart.title}
       subtitle={tStr.ignitionChart.subtitle}
       helpTitle={tStr.ignitionChart.title}
-      helpBody={tStr.kpis.lunarBody}
+      helpBody={`${tStr.kpis.lunarBody} ${tStr.ignitionChart.helpTip}`}
       chartContextPrompt={tStr.prompts.explainIgnitionMap}
       chartContextLabel={tStr.ignitionChart.title}
       legend={legendItems}
       tall={tall}
+      fillHeight={fillHeight}
+      compact={compact}
       className={typo.presentationMode ? 'presentation-focus-card' : ''}
-      footer={
-        <span>
-          {viewMode === 'scatter'
-            ? tStr.ignitionChart.hintBrush
-            : tStr.ignitionChart.hintCell}
-        </span>
-      }
       isEmpty={tests.length === 0}
       loading={loading}
       actions={
@@ -389,7 +514,7 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
             type="button"
             onClick={() => {
               setViewMode('scatter');
-              setHoveredCell(null);
+              cellTooltip.closeAll();
             }}
             className={`inline-flex min-h-[24px] items-center gap-1 whitespace-nowrap rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${
               viewMode === 'scatter'
@@ -404,8 +529,7 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
             type="button"
             onClick={() => {
               setViewMode('heatmap');
-              setHoveredCluster(null);
-              setPinnedCluster(null);
+              scatterTooltip.closeAll();
             }}
             className={`inline-flex min-h-[24px] items-center gap-1 whitespace-nowrap rounded px-2 py-0.5 text-[10px] font-medium transition-colors ${
               viewMode === 'heatmap'
@@ -421,11 +545,8 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
     >
       <div
         ref={boxRef}
-        className="relative h-full w-full select-none overflow-hidden"
-        onMouseLeave={() => {
-          setHoveredCluster(null);
-          setHoveredCell(null);
-        }}
+        style={{ minHeight: `${compact && !isExpanded ? 185 : 240}px` }}
+        className="relative h-full min-h-0 flex-1 w-full select-none overflow-hidden"
       >
         <svg
           ref={svgRef}
@@ -437,8 +558,6 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={() => {
-            setHoveredCluster(null);
-            setHoveredCell(null);
             if (brushStart) handleMouseUp();
           }}
         >
@@ -466,10 +585,10 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
               />
               <text
                 x={PAD.left - 8}
-                y={yPx(o2) + 4}
+                y={yPx(o2) + typo.axisFontSize * 0.34}
                 textAnchor="end"
                 fill={typo.tickColor}
-                fontSize={typo.axisFontSize}
+                className="chart-text-tick"
                 fontFamily="IBM Plex Mono, monospace"
               >
                 {Math.round(o2 * 100)}%
@@ -490,10 +609,10 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
               />
               <text
                 x={xPx(psi)}
-                y={H - PAD.bottom + typo.axisFontSize + 4}
+                y={H - PAD.bottom + typo.axisFontSize + 5}
                 textAnchor="middle"
                 fill={typo.tickColor}
-                fontSize={typo.axisFontSize}
+                className="chart-text-tick"
                 fontFamily="IBM Plex Mono, monospace"
               >
                 {psi}
@@ -514,97 +633,60 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
 
           {/* Fixed Border Zone Labels (OUTSIDE the data point plot area, y < PAD.top) */}
           <g pointerEvents="none">
-            {/* 1. Zona Lunar label on top-left border */}
-            <line
-              x1={lunarX + Math.min(lunarW / 2, 24)}
-              y1={23}
-              x2={lunarX + Math.min(lunarW / 2, 24)}
-              y2={PAD.top}
-              stroke="#34D399"
-              strokeOpacity={0.65}
-              strokeDasharray="2 2"
-            />
-            <rect
-              x={PAD.left}
-              y={4}
-              width={lunarBW}
-              height={19}
-              rx={4}
-              fill="#0B1020"
-              fillOpacity={0.92}
-              stroke="#34D399"
-              strokeOpacity={0.55}
-            />
-            <text
-              x={PAD.left + 7}
-              y={16.5}
-              fill="#6EE7B7"
-              fontSize="9.5"
-              fontWeight="600"
-            >
-              {narrow ? tStr.ignitionChart.lunarZone : lunarLabel}
-            </text>
-
-            {/* 2. Spacesuit reference label on top border */}
-            <rect
-              x={narrow ? W - PAD.right - suitBW : PAD.left + lunarBW + 8}
-              y={4}
-              width={suitBW}
-              height={19}
-              rx={4}
-              fill="#0B1020"
-              fillOpacity={0.92}
-              stroke="#38BDF8"
-              strokeOpacity={0.5}
-            />
-            <text
-              x={(narrow ? W - PAD.right - suitBW : PAD.left + lunarBW + 8) + 7}
-              y={16.5}
-              fill="#7DD3FC"
-              fontSize="9.5"
-              fontFamily="IBM Plex Mono, monospace"
-            >
-              {suitLabel}
-            </text>
-
-            {/* 3. Earth Air label fixed on top-right border (or row 2 on narrow screens) */}
-            {(() => {
-              const ex = narrow ? PAD.left : W - PAD.right - earthBW;
-              const ey = narrow ? 26 : 4;
+            {zoneBadgeLayout.placed.map((badge) => {
+              const targetX =
+                badge.id === 'lunar'
+                  ? lunarX + Math.min(lunarW / 2, 24)
+                  : badge.id === 'earth'
+                    ? earthX
+                    : null;
+              const targetY =
+                badge.id === 'lunar'
+                  ? PAD.top
+                  : badge.id === 'earth'
+                    ? earthY
+                    : null;
               return (
-                <>
-                  <line
-                    x1={earthX}
-                    y1={earthY}
-                    x2={ex + earthBW / 2}
-                    y2={ey + 19}
-                    stroke="#FACC15"
-                    strokeOpacity={0.35}
-                    strokeDasharray="3 3"
-                  />
+                <g key={badge.id}>
+                  {targetX !== null && targetY !== null && (
+                    <line
+                      x1={targetX}
+                      y1={targetY}
+                      x2={Math.min(badge.x + badge.bw / 2, W - PAD.right)}
+                      y2={badge.y + badgeH}
+                      stroke={badge.stroke}
+                      strokeOpacity={badge.id === 'earth' ? 0.38 : 0.65}
+                      strokeDasharray="3 3"
+                    />
+                  )}
                   <rect
-                    x={ex}
-                    y={ey}
-                    width={earthBW}
-                    height={19}
+                    x={badge.x}
+                    y={badge.y}
+                    width={badge.bw}
+                    height={badgeH}
                     rx={4}
                     fill="#0B1020"
-                    fillOpacity={0.92}
-                    stroke="#FACC15"
-                    strokeOpacity={0.6}
+                    fillOpacity={0.94}
+                    stroke={badge.stroke}
+                    strokeOpacity={0.58}
                   />
                   <text
-                    x={ex + 7}
-                    y={ey + 12.5}
-                    fill="#FDE047"
-                    fontSize="9.5"
-                    fontWeight="600"
+                    x={badge.x + 8}
+                    y={badge.y + badgeH * 0.7}
+                    fill={badge.fill}
+                    className="chart-text-annotation"
+                    fontWeight={badge.fontWeight}
+                    fontFamily={
+                      badge.fontFamily === 'mono'
+                        ? 'IBM Plex Mono, monospace'
+                        : undefined
+                    }
                   >
-                    {earthLabel}
+                    {badge.text}
                   </text>
-                </>
+                </g>
               );
-            })()}
+            })}
           </g>
 
           {/* Heatmap View */}
@@ -622,28 +704,49 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
                   )}, ${Math.round(248 - (cell.pct / 100) * 190)}, ${
                     0.24 + (cell.pct / 100) * 0.56
                   })`;
+              const isCellActive =
+                activeCell?.ix === cell.ix && activeCell?.iy === cell.iy;
               return (
                 <g
                   key={`cell-${cell.ix}-${cell.iy}`}
+                  data-point-trigger={hasTests ? 'true' : undefined}
                   className={hasTests ? 'cursor-pointer' : ''}
-                  onMouseEnter={() =>
-                    setHoveredCell({
-                      psiLabel: `${formatNumber(cell.psi0, 1, lang)}–${formatNumber(cell.psi1, 1, lang)} psi`,
-                      o2Label: `${Math.round(cell.o20 * 100)}–${Math.round(cell.o21 * 100)}% O₂`,
-                      total: cell.tests.length,
-                      ignited: cell.ignited,
-                      coolCount: cell.coolCount,
-                      pct: cell.pct,
-                    })
-                  }
-                  onClick={() => {
-                    if (cell.tests.length > 0) {
-                      setCrossFilter({
-                        source: tStr.ignitionChart.heatmap,
-                        label: `${cell.tests.length} (${Math.round(cell.o20 * 100)}–${Math.round(cell.o21 * 100)}% O₂)`,
-                        testIds: cell.tests.map((t) => t.test_id),
-                      });
+                  onMouseEnter={(e) => {
+                    if (!hasTests) return;
+                    const r = (e.currentTarget as Element).getBoundingClientRect();
+                    cellTooltip.onPointEnter(cell, {
+                      x: r.left + r.width / 2,
+                      y: r.top + r.height / 2,
+                      width: r.width,
+                      height: r.height,
+                    });
+                  }}
+                  onMouseLeave={() => {
+                    if (hasTests) cellTooltip.onPointLeave();
+                  }}
+                  onPointerDown={(e) => {
+                    lastPointerTypeRef.current = e.pointerType;
+                  }}
+                  onClick={(e) => {
+                    if (!hasTests) return;
+                    e.stopPropagation();
+                    if (cell.tests.length === 1) {
+                      cellTooltip.closeAll();
+                      selectTest(cell.tests[0].test_id, true);
+                      return;
                     }
+                    const r = (e.currentTarget as Element).getBoundingClientRect();
+                    cellTooltip.onPointClick(
+                      cell,
+                      {
+                        x: r.left + r.width / 2,
+                        y: r.top + r.height / 2,
+                        width: r.width,
+                        height: r.height,
+                      },
+                      `${cell.ix}-${cell.iy}`,
+                      lastPointerTypeRef.current
+                    );
                   }}
                 >
                   <rect
@@ -653,15 +756,31 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
                     height={Math.max(0, y1 - y0 - 2)}
                     rx={3}
                     fill={fill}
-                    stroke={hasTests ? 'rgba(148,163,184,0.32)' : 'rgba(30,41,59,0.4)'}
+                    stroke={
+                      isCellActive
+                        ? '#38BDF8'
+                        : hasTests
+                          ? 'rgba(148,163,184,0.32)'
+                          : 'rgba(30,41,59,0.4)'
+                    }
+                    strokeWidth={isCellActive ? 1.8 : 1}
                   />
-                  {hasTests && x1 - x0 > 36 && (
+                  {hasTests &&
+                    x1 - x0 >=
+                      measureTextWidth(
+                        `${Math.round(cell.pct)}% (${cell.tests.length})`,
+                        typo.barValueFontSize,
+                        '600',
+                        'mono'
+                      ) +
+                        8 &&
+                    y1 - y0 >= typo.barValueFontSize + 6 && (
                     <text
                       x={(x0 + x1) / 2}
-                      y={(y0 + y1) / 2 + 3}
+                      y={(y0 + y1) / 2 + typo.barValueFontSize * 0.34}
                       textAnchor="middle"
                       fill="#F8FAFC"
-                      fontSize="10"
+                      className="chart-text-bar"
                       fontWeight="600"
                       fontFamily="IBM Plex Mono, monospace"
                     >
@@ -678,26 +797,40 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
               const t = cluster.rep;
               const { cx, cy, color } = cluster;
               const isSelected = cluster.tests.some((x) => x.test_id === selectedTestId);
+              const isTooltipActive = activeCluster?.id === cluster.id;
               const count = cluster.tests.length;
-              const r = isSelected ? 6.4 : 5.4;
+              const r = isSelected || isTooltipActive ? 6.4 : 5.4;
 
               const commonProps = {
                 'data-point': 'true',
+                'data-point-trigger': 'true',
                 className: 'cursor-pointer transition-opacity',
-                onMouseEnter: () => setHoveredCluster(cluster),
+                onMouseEnter: () =>
+                  scatterTooltip.onPointEnter(
+                    cluster,
+                    svgCoordsToAnchor(cx, cy, 16)
+                  ),
+                onMouseLeave: () => scatterTooltip.onPointLeave(),
+                onPointerDown: (e: React.PointerEvent) => {
+                  lastPointerTypeRef.current = e.pointerType;
+                },
                 onClick: (e: React.MouseEvent) => {
                   e.stopPropagation();
                   if (count === 1) {
-                    setPinnedCluster(null);
+                    scatterTooltip.closeAll();
                     selectTest(t.test_id, true);
                   } else {
-                    setPinnedCluster((prev) =>
-                      prev?.id === cluster.id ? null : cluster
+                    scatterTooltip.onPointClick(
+                      cluster,
+                      svgCoordsToAnchor(cx, cy, 16),
+                      cluster.id,
+                      lastPointerTypeRef.current
                     );
                   }
                 },
               };
 
+              const highlight = isSelected || isTooltipActive;
               let shape: React.ReactNode;
               if (t.cool_flame || t.ignition_type === 'cool') {
                 const d = r + 0.6;
@@ -707,8 +840,8 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
                     points={`${cx},${cy - d} ${cx + d},${cy} ${cx},${cy + d} ${cx - d},${cy}`}
                     fill={color}
                     fillOpacity={0.92}
-                    stroke={isSelected ? '#FFFFFF' : '#0B1020'}
-                    strokeWidth={isSelected ? 1.8 : 1}
+                    stroke={highlight ? '#FFFFFF' : '#0B1020'}
+                    strokeWidth={highlight ? 1.8 : 1}
                   />
                 );
               } else if (t.hit_burner_temp_limit || t.outcome === 'flash_only') {
@@ -719,8 +852,8 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
                     points={`${cx},${cy - d} ${cx + d},${cy + d * 0.85} ${cx - d},${cy + d * 0.85}`}
                     fill={t.hit_burner_temp_limit ? '#EF4444' : '#F59E0B'}
                     fillOpacity={0.92}
-                    stroke={isSelected ? '#FFFFFF' : '#0B1020'}
-                    strokeWidth={isSelected ? 1.8 : 1}
+                    stroke={highlight ? '#FFFFFF' : '#0B1020'}
+                    strokeWidth={highlight ? 1.8 : 1}
                   />
                 );
               } else if (!t.ignited) {
@@ -733,8 +866,8 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
                       r={r}
                       fill="#475569"
                       fillOpacity={0.85}
-                      stroke={isSelected ? '#FFFFFF' : '#0B1020'}
-                      strokeWidth={isSelected ? 1.8 : 1}
+                      stroke={highlight ? '#FFFFFF' : '#0B1020'}
+                      strokeWidth={highlight ? 1.8 : 1}
                     />
                     <path
                       d={`M${cx - s},${cy - s} L${cx + s},${cy + s} M${cx + s},${cy - s} L${cx - s},${cy + s}`}
@@ -753,8 +886,8 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
                     r={r}
                     fill={color}
                     fillOpacity={0.88}
-                    stroke={isSelected ? '#FFFFFF' : '#0B1020'}
-                    strokeWidth={isSelected ? 1.8 : 1}
+                    stroke={highlight ? '#FFFFFF' : '#0B1020'}
+                    strokeWidth={highlight ? 1.8 : 1}
                   />
                 );
               }
@@ -834,141 +967,89 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
           {/* Axis Labels */}
           <text
             x={PAD.left + PLOT_W / 2}
-            y={H - 8}
+            y={H - Math.max(6, Math.round(typo.axisTitleSize * 0.35 + 2))}
             textAnchor="middle"
             fill={typo.tickColor}
-            fontSize={typo.axisTitleSize}
+            className="chart-text-axis"
           >
-            {W < 400 ? tStr.ignitionChart.xAxisShort : tStr.ignitionChart.xAxis}
+            {W < 420 ? tStr.ignitionChart.xAxisShort : tStr.ignitionChart.xAxis}
           </text>
-          <text
-            x={16}
-            y={PAD.top + PLOT_H / 2}
-            textAnchor="middle"
-            fill={typo.tickColor}
-            fontSize={typo.axisTitleSize}
-            transform={`rotate(-90 16 ${PAD.top + PLOT_H / 2})`}
-          >
-            {tStr.ignitionChart.yAxis}
-          </text>
+          {(() => {
+            const yLabelX = Math.max(14, Math.ceil(typo.axisTitleSize * 0.85 + 4));
+            const yLabelY = PAD.top + PLOT_H / 2;
+            return (
+              <text
+                x={yLabelX}
+                y={yLabelY}
+                textAnchor="middle"
+                fill={typo.tickColor}
+                className="chart-text-axis"
+                transform={`rotate(-90 ${yLabelX} ${yLabelY})`}
+              >
+                {tStr.ignitionChart.yAxis}
+              </text>
+            );
+          })()}
         </svg>
 
-        {/* Transient Tooltip (ONLY visible on hover or click, never fixed) */}
-        {activeCluster && viewMode === 'scatter' && (
-          <div
-            style={{
-              zIndex: 'var(--z-tooltip)',
-              left: `${Math.max(8, Math.min(W - 242, activeCluster.cx + 12))}px`,
-              top: `${Math.max(8, Math.min(H - 150, activeCluster.cy - 18))}px`,
-            }}
-            className={`${
-              pinnedCluster && !hoveredCluster ? 'pointer-events-auto' : 'pointer-events-none'
-            } absolute w-58 rounded-lg border border-slate-700 bg-[#0B1020]/96 p-2.5 text-[11px] shadow-xl shadow-black/75`}
-          >
-            {activeCluster.tests.length === 1 ? (
-              <>
-                <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-1">
-                  <span className="font-mono font-bold text-cyan-300">
-                    {activeCluster.rep.test_id}
-                  </span>
-                  <span className="text-[10px] text-slate-300">
-                    {fuelLabel(activeCluster.rep.fuel, lang)} ·{' '}
-                    {flameTypeLabel(activeCluster.rep.flame_type, lang)}
-                  </span>
-                </div>
-                <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono text-[10px] tabular-nums text-slate-200">
-                  <span>O₂: {Math.round(activeCluster.rep.o2_fraction * 100)}%</span>
-                  <span>
-                    P: {formatNumber(activeCluster.rep.pressure_psi, 2, lang)} psi
-                  </span>
-                  <span>
-                    {activeCluster.rep.burn_time_s !== null
-                      ? `${formatNumber(activeCluster.rep.burn_time_s, 1, lang)} s`
-                      : '—'}
-                  </span>
-                  <span>
-                    {activeCluster.rep.peak_burner_temp_c !== null
-                      ? `${formatNumber(activeCluster.rep.peak_burner_temp_c, 0, lang)} °C`
-                      : '—'}
-                  </span>
-                </div>
-                <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                  <span
-                    className={`whitespace-nowrap rounded border px-1.5 py-0.5 text-[10px] ${outcomeMeta(activeCluster.rep.outcome, lang).badgeClass}`}
-                  >
-                    {outcomeMeta(activeCluster.rep.outcome, lang).glyph}{' '}
-                    {outcomeMeta(activeCluster.rep.outcome, lang).label}
-                  </span>
-                  {isInLunarZone(activeCluster.rep) && (
-                    <span className="whitespace-nowrap rounded border border-emerald-500/40 bg-emerald-500/15 px-1.5 py-0.5 text-[10px] text-emerald-300">
-                      {tStr.ignitionChart.lunarZone}
-                    </span>
-                  )}
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-1">
-                  <span className="font-mono font-bold text-cyan-300">
-                    {activeCluster.tests.length} ensaios ·{' '}
-                    {Math.round(activeCluster.rep.o2_fraction * 100)}% O₂ ·{' '}
-                    {formatNumber(activeCluster.rep.pressure_psi, 1, lang)} psi
-                  </span>
-                </div>
-                <div className="mt-1.5 max-h-28 space-y-1 overflow-y-auto pr-1">
-                  {activeCluster.tests.slice(0, 6).map((item) => (
-                    <button
-                      key={item.test_id}
-                      type="button"
-                      onClick={() => {
-                        setPinnedCluster(null);
-                        selectTest(item.test_id, true);
-                      }}
-                      className="flex w-full items-center justify-between gap-2 rounded bg-slate-900/90 px-1.5 py-1 text-left text-[10px] hover:bg-slate-800"
-                    >
-                      <span className="font-mono font-semibold text-cyan-300">
-                        {item.test_id}
-                      </span>
-                      <span className="text-slate-300">
-                        {fuelLabel(item.fuel, lang)} ·{' '}
-                        {flameTypeLabel(item.flame_type, lang)}
-                      </span>
-                    </button>
-                  ))}
-                  {activeCluster.tests.length > 6 && (
-                    <div className="text-[10px] text-slate-300">
-                      +{activeCluster.tests.length - 6} mais nesta posição
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
+        {/* Shared Floating UI Portal Popover for Scatter Clusters */}
+        {viewMode === 'scatter' && (
+          <PointTooltipPopover
+            open={Boolean(scatterTooltip.active)}
+            pinned={scatterTooltip.isPinned}
+            anchor={scatterTooltip.active?.anchor ?? null}
+            tests={activeCluster?.tests ?? []}
+            onPointerEnterPopover={scatterTooltip.onPopoverEnter}
+            onPointerLeavePopover={scatterTooltip.onPopoverLeave}
+            onPin={scatterTooltip.pinActive}
+            onClose={scatterTooltip.closeAll}
+          />
         )}
 
-        {hoveredCell && viewMode === 'heatmap' && (
-          <div
-            style={{ zIndex: 'var(--z-tooltip)' }}
-            className="pointer-events-none absolute right-2 top-2 w-52 rounded-lg border border-slate-700 bg-[#0B1020]/95 p-2.5 text-[11px] shadow-xl"
-          >
-            <div className="font-mono font-semibold text-cyan-300">
-              {hoveredCell.o2Label} · {hoveredCell.psiLabel}
-            </div>
-            <div className="mt-1 space-y-0.5 text-slate-200">
-              <div>
-                {tStr.coolMatrix.tests}:{' '}
-                <strong className="font-mono">{hoveredCell.total}</strong>
-              </div>
-              <div>
-                {hoveredCell.ignited} ({formatNumber(hoveredCell.pct, 0, lang)}%)
-              </div>
-              {hoveredCell.coolCount > 0 && (
-                <div className="text-purple-300">
-                  ◆ <strong className="font-mono">{hoveredCell.coolCount}</strong>
-                </div>
-              )}
-            </div>
-          </div>
+        {/* Shared Floating UI Portal Popover for Heatmap Cells */}
+        {viewMode === 'heatmap' && (
+          <PointTooltipPopover
+            open={Boolean(cellTooltip.active)}
+            pinned={cellTooltip.isPinned}
+            anchor={cellTooltip.active?.anchor ?? null}
+            tests={activeCell?.tests ?? []}
+            headerSummary={
+              activeCell
+                ? `${tStr.pointPopover.testsCount(activeCell.tests.length)} · ${Math.round(
+                    activeCell.o20 * 100
+                  )}–${Math.round(activeCell.o21 * 100)}% O₂ · ${formatNumber(
+                    activeCell.psi0,
+                    1,
+                    lang
+                  )}–${formatNumber(activeCell.psi1, 1, lang)} psi`
+                : undefined
+            }
+            extraStatsLine={
+              activeCell
+                ? `${activeCell.ignited}/${activeCell.tests.length} (${formatNumber(
+                    activeCell.pct,
+                    0,
+                    lang
+                  )}%)${activeCell.coolCount > 0 ? ` · ◆ ${activeCell.coolCount}` : ''}`
+                : undefined
+            }
+            onFilterSubset={
+              activeCell && activeCell.tests.length > 0
+                ? () =>
+                    setCrossFilter({
+                      source: tStr.ignitionChart.heatmap,
+                      label: `${activeCell.tests.length} (${Math.round(
+                        activeCell.o20 * 100
+                      )}–${Math.round(activeCell.o21 * 100)}% O₂)`,
+                      testIds: activeCell.tests.map((t) => t.test_id),
+                    })
+                : undefined
+            }
+            onPointerEnterPopover={cellTooltip.onPopoverEnter}
+            onPointerLeavePopover={cellTooltip.onPopoverLeave}
+            onPin={cellTooltip.pinActive}
+            onClose={cellTooltip.closeAll}
+          />
         )}
       </div>
     </ChartCard>

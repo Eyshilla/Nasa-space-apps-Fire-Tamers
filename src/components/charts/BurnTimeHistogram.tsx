@@ -1,9 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Bar,
   BarChart,
   CartesianGrid,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -12,8 +11,14 @@ import { usePsiStore } from '../../store/usePsiStore';
 import type { Psi159Test } from '../../types/psi159';
 import { fuelLabel } from '../../utils/formatters';
 import { useStrings } from '../../utils/i18n';
-import { useChartTypography } from '../../utils/useChartTypography';
+import {
+  measureTextWidth,
+  useChartTypography,
+} from '../../utils/useChartTypography';
 import { ChartCard, type ChartLegendItem } from '../ChartCard';
+import { useChartHost, useIsChartExpanded } from '../ChartHostContext';
+import { SafeResponsiveContainer } from '../SafeResponsiveContainer';
+import { ClickableChartTooltip } from './ClickableChartTooltip';
 
 interface BurnTimeHistogramProps {
   tests: Psi159Test[];
@@ -38,21 +43,10 @@ export const BurnTimeHistogram: React.FC<BurnTimeHistogramProps> = ({
   const tStr = useStrings(lang);
   const typo = useChartTypography();
 
-  const boxRef = useRef<HTMLDivElement | null>(null);
+  const host = useChartHost();
+  const isExpanded = useIsChartExpanded();
   const [boxWidth, setBoxWidth] = useState(340);
-
-  useEffect(() => {
-    const el = boxRef.current;
-    if (!el) return;
-    const measure = () => {
-      const w = el.clientWidth;
-      if (w > 0) setBoxWidth(w);
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [loading, tests.length]);
+  const compactMinH = host?.fillHeight && !isExpanded ? 185 : 240;
 
   const data = useMemo(() => {
     return BINS.map((bin) => {
@@ -100,46 +94,53 @@ export const BurnTimeHistogram: React.FC<BurnTimeHistogramProps> = ({
       title={tStr.burnChart.title}
       subtitle={tStr.burnChart.subtitle}
       helpTitle={tStr.burnChart.title}
-      helpBody={tStr.kpis.burnBody}
+      helpBody={`${tStr.kpis.burnBody} ${tStr.burnChart.helpTip}`}
       chartContextPrompt={tStr.prompts.explainBurnTime}
       chartContextLabel={tStr.burnChart.title}
       legend={legendItems}
-      footer={<span>{tStr.burnChart.hintClick}</span>}
       isEmpty={tests.length === 0}
       loading={loading}
     >
-      <div ref={boxRef} className="h-full w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 8, right: 10, left: 2, bottom: 8 }}>
+      <SafeResponsiveContainer
+        minHeight={compactMinH}
+        fallbackWidth={340}
+        onMeasureWidth={(w) => setBoxWidth((prev) => (prev === w ? prev : w))}
+      >
+        {(() => {
+          const yAxisW = Math.ceil(
+            measureTextWidth('150', typo.axisFontSize, '500', 'mono') + 14
+          );
+          const plotW = Math.max(140, boxWidth - yAxisW - 14);
+          const widestBinW =
+            measureTextWidth('120–180s', typo.axisFontSize, '500') + 14;
+          const xInterval = plotW / BINS.length < widestBinW ? 1 : 0;
+          return (
+            <BarChart data={data} margin={{ top: 8, right: 12, left: 4, bottom: 10 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" vertical={false} />
             <XAxis
               dataKey="label"
-              interval={boxWidth < 330 ? 1 : 0}
+              interval={xInterval}
+              height={Math.ceil(typo.axisFontSize * 1.55 + 10)}
               tick={{ fill: typo.tickColor, fontSize: typo.axisFontSize }}
               axisLine={{ stroke: '#334155' }}
               tickLine={false}
             />
             <YAxis
-              width={typo.isLargeScreen ? 38 : 30}
+              width={yAxisW}
               tick={{ fill: typo.tickColor, fontSize: typo.axisFontSize }}
               axisLine={false}
               tickLine={false}
             />
             <Tooltip
               cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
-              contentStyle={{
-                backgroundColor: '#0B1020',
-                border: '1px solid #334155',
-                borderRadius: '8px',
-                fontSize: '11px',
-                color: '#F1F5F9',
-              }}
+              content={<ClickableChartTooltip hintText={tStr.chartCard.clickToFilter} hideZero />}
             />
             <Bar
               dataKey="ethane"
               name={fuelLabel('ethane', lang)}
               stackId="g"
               fill="#06B6D4"
+              activeBar={{ fillOpacity: 1, stroke: '#F8FAFC', strokeWidth: 1.5 }}
               className="cursor-pointer"
               onClick={(entry) => {
                 const payload = entry?.payload as { label: string; ids: string[] } | undefined;
@@ -157,6 +158,7 @@ export const BurnTimeHistogram: React.FC<BurnTimeHistogramProps> = ({
               name={fuelLabel('propane', lang)}
               stackId="g"
               fill="#F97316"
+              activeBar={{ fillOpacity: 1, stroke: '#F8FAFC', strokeWidth: 1.5 }}
               className="cursor-pointer"
               onClick={(entry) => {
                 const payload = entry?.payload as { label: string; ids: string[] } | undefined;
@@ -174,6 +176,7 @@ export const BurnTimeHistogram: React.FC<BurnTimeHistogramProps> = ({
               name={fuelLabel('butane', lang)}
               stackId="g"
               fill="#A855F7"
+              activeBar={{ fillOpacity: 1, stroke: '#F8FAFC', strokeWidth: 1.5 }}
               className="cursor-pointer"
               onClick={(entry) => {
                 const payload = entry?.payload as { label: string; ids: string[] } | undefined;
@@ -186,9 +189,10 @@ export const BurnTimeHistogram: React.FC<BurnTimeHistogramProps> = ({
                 }
               }}
             />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+            </BarChart>
+          );
+        })()}
+      </SafeResponsiveContainer>
     </ChartCard>
   );
 };

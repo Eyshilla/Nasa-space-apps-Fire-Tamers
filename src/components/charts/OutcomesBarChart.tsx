@@ -1,9 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Bar,
   BarChart,
   CartesianGrid,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -17,8 +16,14 @@ import {
   outcomeShortLabel,
 } from '../../utils/formatters';
 import { useStrings } from '../../utils/i18n';
-import { useChartTypography } from '../../utils/useChartTypography';
+import {
+  measureTextWidth,
+  useChartTypography,
+} from '../../utils/useChartTypography';
 import { ChartCard, type ChartLegendItem } from '../ChartCard';
+import { useChartHost, useIsChartExpanded } from '../ChartHostContext';
+import { SafeResponsiveContainer } from '../SafeResponsiveContainer';
+import { ClickableChartTooltip } from './ClickableChartTooltip';
 
 interface OutcomesBarChartProps {
   tests: Psi159Test[];
@@ -46,21 +51,10 @@ export const OutcomesBarChart: React.FC<OutcomesBarChartProps> = ({
   const tStr = useStrings(lang);
   const typo = useChartTypography();
 
-  const containerRef = useRef<HTMLDivElement>(null);
+  const host = useChartHost();
+  const isExpanded = useIsChartExpanded();
   const [chartW, setChartW] = useState(480);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const measure = () => {
-      const w = el.clientWidth;
-      if (w > 0) setChartW(w);
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [loading, tests.length]);
+  const compactMinH = host?.fillHeight && !isExpanded ? 185 : 240;
 
   const data = useMemo(() => {
     return FUELS.map((fuel) => {
@@ -148,17 +142,19 @@ export const OutcomesBarChart: React.FC<OutcomesBarChartProps> = ({
       title={tStr.outcomesChart.title}
       subtitle={tStr.outcomesChart.subtitle}
       helpTitle={tStr.outcomesChart.title}
-      helpBody={tStr.kpis.ignitedBody}
+      helpBody={`${tStr.kpis.ignitedBody} ${tStr.outcomesChart.helpTip}`}
       chartContextPrompt={tStr.prompts.explainOutcomes}
       chartContextLabel={tStr.outcomesChart.title}
       legend={legendItems}
-      footer={<span>{tStr.outcomesChart.hintClick}</span>}
       isEmpty={tests.length === 0}
       loading={loading}
     >
-      <div ref={containerRef} className="h-full w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
+      <SafeResponsiveContainer
+        minHeight={compactMinH}
+        fallbackWidth={480}
+        onMeasureWidth={(w) => setChartW((prev) => (prev === w ? prev : w))}
+      >
+        <BarChart
             data={data}
             barGap={chartW < 400 ? 4 : 8}
             barCategoryGap="24%"
@@ -192,13 +188,17 @@ export const OutcomesBarChart: React.FC<OutcomesBarChartProps> = ({
             <XAxis
               dataKey="fuelLabel"
               interval={0}
-              height={32}
+              height={Math.ceil(typo.axisFontSize * 1.55 + 10)}
               tick={{ fill: typo.tickColor, fontSize: typo.axisFontSize, fontWeight: 600 }}
               axisLine={{ stroke: '#334155' }}
               tickLine={false}
             />
             <YAxis
-              width={typo.isLargeScreen ? 56 : 44}
+              width={Math.ceil(
+                measureTextWidth('100', typo.axisFontSize, '500', 'mono') +
+                  typo.axisTitleSize +
+                  24
+              )}
               tick={{ fill: typo.tickColor, fontSize: typo.axisFontSize }}
               axisLine={false}
               tickLine={false}
@@ -206,7 +206,7 @@ export const OutcomesBarChart: React.FC<OutcomesBarChartProps> = ({
                 value: tStr.outcomesChart.yAxisLabel,
                 angle: -90,
                 position: 'insideLeft',
-                offset: 2,
+                offset: 4,
                 style: {
                   fill: typo.tickColor,
                   fontSize: typo.axisTitleSize,
@@ -216,13 +216,7 @@ export const OutcomesBarChart: React.FC<OutcomesBarChartProps> = ({
             />
             <Tooltip
               cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
-              contentStyle={{
-                backgroundColor: '#0B1020',
-                border: '1px solid #334155',
-                borderRadius: '8px',
-                fontSize: '11px',
-                color: '#F1F5F9',
-              }}
+              content={<ClickableChartTooltip hintText={tStr.chartCard.clickToFilter} hideZero />}
             />
 
             {/* Normal Flame Stacked Column */}
@@ -235,7 +229,8 @@ export const OutcomesBarChart: React.FC<OutcomesBarChartProps> = ({
                   name={name}
                   stackId="normal"
                   fill={series.color}
-                  fillOpacity={0.96}
+                  fillOpacity={0.94}
+                  activeBar={{ fillOpacity: 1, stroke: '#F8FAFC', strokeWidth: 1.5 }}
                   className="cursor-pointer"
                   onClick={(entry) => {
                     const payload = entry?.payload as { fuel: string } | undefined;
@@ -259,6 +254,7 @@ export const OutcomesBarChart: React.FC<OutcomesBarChartProps> = ({
                   fill={`url(#hatch-${series.key})`}
                   stroke={series.color}
                   strokeWidth={0.8}
+                  activeBar={{ stroke: '#F8FAFC', strokeWidth: 1.6 }}
                   className="cursor-pointer"
                   onClick={(entry) => {
                     const payload = entry?.payload as { fuel: string } | undefined;
@@ -269,9 +265,8 @@ export const OutcomesBarChart: React.FC<OutcomesBarChartProps> = ({
                 />
               );
             })}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+        </BarChart>
+      </SafeResponsiveContainer>
     </ChartCard>
   );
 };

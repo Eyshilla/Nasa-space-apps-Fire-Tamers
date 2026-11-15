@@ -177,7 +177,9 @@ export const ChamberSimulator3D: React.FC<ChamberSimulator3DProps> = ({
     renderer.setPixelRatio(
       isSoftwareGl ? 1 : Math.min(window.devicePixelRatio || 1, 2)
     );
-    renderer.setSize(container.clientWidth, container.clientHeight);
+    const initialW = Math.max(1, container.clientWidth);
+    const initialH = Math.max(240, container.clientHeight);
+    renderer.setSize(initialW, initialH);
     renderer.setClearColor(0x0b1020, 1);
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
@@ -185,7 +187,7 @@ export const ChamberSimulator3D: React.FC<ChamberSimulator3DProps> = ({
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(
       40,
-      container.clientWidth / Math.max(1, container.clientHeight),
+      initialW / Math.max(1, initialH),
       0.1,
       50
     );
@@ -269,15 +271,27 @@ export const ChamberSimulator3D: React.FC<ChamberSimulator3DProps> = ({
     haloMeshRef.current = haloMesh;
     scene.add(haloMesh);
 
-    const resizeObserver = new ResizeObserver(() => {
+    let retryFrameId = 0;
+    let retriesLeft = 10;
+    const syncRendererSize = () => {
       if (!container) return;
       const w = container.clientWidth;
-      const h = Math.max(1, container.clientHeight);
+      const h = container.clientHeight;
+      if (w <= 0 || h <= 0) {
+        if (retriesLeft > 0) {
+          retriesLeft -= 1;
+          retryFrameId = requestAnimationFrame(syncRendererSize);
+        }
+        return;
+      }
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       renderer.setSize(w, h);
-    });
+    };
+
+    const resizeObserver = new ResizeObserver(syncRendererSize);
     resizeObserver.observe(container);
+    syncRendererSize();
 
     const clock = new THREE.Clock();
     let rafId = 0;
@@ -291,6 +305,7 @@ export const ChamberSimulator3D: React.FC<ChamberSimulator3DProps> = ({
 
     return () => {
       cancelAnimationFrame(rafId);
+      cancelAnimationFrame(retryFrameId);
       resizeObserver.disconnect();
       controls.dispose();
       chamberGeo.dispose();
@@ -358,16 +373,23 @@ export const ChamberSimulator3D: React.FC<ChamberSimulator3DProps> = ({
     >
       {activeTest && (
         <div className="grid items-start gap-4 lg:grid-cols-12">
-          <div className="chart-card__plot min-w-0 overflow-hidden rounded-lg border border-slate-800 bg-[#0B1020] lg:col-span-7">
-            <div ref={containerRef} className="h-full w-full touch-none" />
+          <div
+            style={{ minHeight: 240 }}
+            className="chart-card__plot min-w-0 overflow-hidden rounded-lg border border-slate-800 bg-[#0B1020] lg:col-span-7"
+          >
+            <div
+              ref={containerRef}
+              style={{ minHeight: 240 }}
+              className="h-full w-full touch-none"
+            />
             <div
               style={{ zIndex: 'var(--z-sticky)' }}
-              className="pointer-events-none absolute left-2.5 top-2.5 max-w-[calc(100%-20px)] rounded border border-slate-800 bg-[#0B1020]/90 px-2.5 py-1.5 text-[11px]"
+              className="pointer-events-none absolute left-2.5 top-2.5 max-w-[calc(100%-20px)] rounded border border-slate-800 bg-[#0B1020]/90 px-2.5 py-1.5"
             >
-              <div className="font-mono font-bold text-cyan-300">
+              <div className="chart-text-axis font-mono font-bold text-cyan-300">
                 {activeTest.test_id}
               </div>
-              <div className="wrap-anywhere text-[10px] text-slate-300">
+              <div className="chart-text-annotation wrap-anywhere text-slate-300">
                 {gravityMode === 'microg'
                   ? tStr.sim3d.microgCaption
                   : tStr.sim3d.earthCaption}
@@ -379,7 +401,7 @@ export const ChamberSimulator3D: React.FC<ChamberSimulator3DProps> = ({
             <div className="min-w-0">
               <label
                 htmlFor="sim-test-select"
-                className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-slate-400"
+                className="chart-text-annotation mb-1 block font-semibold uppercase tracking-wider text-slate-400"
               >
                 {tStr.sim3d.activeTestLabel}
               </label>
@@ -387,7 +409,7 @@ export const ChamberSimulator3D: React.FC<ChamberSimulator3DProps> = ({
                 id="sim-test-select"
                 value={activeTest.test_id}
                 onChange={(e) => selectTest(e.target.value, false)}
-                className="min-h-[32px] w-full rounded-md border border-slate-700 bg-[#0B1020] px-2.5 py-1.5 font-mono text-xs text-slate-100 focus:border-cyan-400 focus:outline-none"
+                className="chart-text-annotation min-h-[34px] w-full rounded-md border border-slate-700 bg-[#0B1020] px-2.5 py-1.5 font-mono text-slate-100 focus:border-cyan-400 focus:outline-none"
               >
                 {tests.map((t) => (
                   <option key={t.test_id} value={t.test_id}>
@@ -399,7 +421,7 @@ export const ChamberSimulator3D: React.FC<ChamberSimulator3DProps> = ({
               </select>
 
               <div className="mt-2">
-                <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                <div className="chart-text-annotation mb-1 font-semibold uppercase tracking-wider text-slate-400">
                   {tStr.sim3d.presetsLabel}
                 </div>
                 <div className="grid grid-cols-1 gap-1.5 min-[420px]:grid-cols-2">
@@ -418,12 +440,12 @@ export const ChamberSimulator3D: React.FC<ChamberSimulator3DProps> = ({
                             : 'border-slate-800 bg-[#0B1020] text-slate-300 hover:border-slate-700'
                         }`}
                       >
-                        <div className="font-mono text-[10px] font-semibold">
+                        <div className="chart-text-annotation font-mono font-semibold">
                           {b.id}
                         </div>
                         <div
                           title={b.label}
-                          className="truncate text-[10px] text-slate-400"
+                          className="wrap-anywhere text-xs text-slate-400"
                         >
                           {b.label}
                         </div>
@@ -434,8 +456,8 @@ export const ChamberSimulator3D: React.FC<ChamberSimulator3DProps> = ({
               </div>
             </div>
 
-            <div className="rounded-lg border border-slate-800 bg-[#0B1020] p-2.5 text-xs">
-              <div className="grid grid-cols-2 gap-2 font-mono text-[11px] tabular-nums">
+            <div className="chart-text-annotation rounded-lg border border-slate-800 bg-[#0B1020] p-2.5">
+              <div className="grid grid-cols-2 gap-2 font-mono tabular-nums">
                 <div>
                   <span className="text-slate-400">O₂:</span>{' '}
                   <span className="text-cyan-300">
@@ -465,7 +487,7 @@ export const ChamberSimulator3D: React.FC<ChamberSimulator3DProps> = ({
                   </span>
                 </div>
               </div>
-              <div className="mt-2 flex flex-wrap items-center justify-between gap-1.5 border-t border-slate-800 pt-2 text-[11px]">
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-1.5 border-t border-slate-800 pt-2">
                 <span className="wrap-anywhere text-slate-300">
                   {tStr.sim3d.colorLabel}:{' '}
                   <strong>{flameColorLabel(activeTest.flame_color, lang)}</strong> ·{' '}
@@ -482,7 +504,7 @@ export const ChamberSimulator3D: React.FC<ChamberSimulator3DProps> = ({
                   }
                   className="inline-flex items-center gap-1 whitespace-nowrap font-medium text-cyan-300 hover:text-cyan-200"
                 >
-                  <Sparkles className="h-3 w-3 shrink-0" />
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" />
                   {tStr.sim3d.askAboutTest}
                 </button>
               </div>
