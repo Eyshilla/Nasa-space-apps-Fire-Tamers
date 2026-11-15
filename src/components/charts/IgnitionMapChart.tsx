@@ -369,7 +369,7 @@ export const IgnitionMapChart: React.FC<IgnitionMapChartProps> = ({
       subtitle={tStr.ignitionChart.subtitle}
       helpTitle={tStr.ignitionChart.title}
       helpBody={tStr.kpis.lunarBody}
-      chartContextPrompt="Explique o Mapa de Ignição atual (pressão vs O₂) destacando a Zona Lunar (O₂ >= 30% e pressão <= 10,2 psi), o Ar da Terra e exemplos reais de Test ID."
+      chartContextPrompt={tStr.prompts.explainIgnitionMap}
       chartContextLabel={tStr.ignitionChart.title}
       legend={legendItems}
       tall={tall}

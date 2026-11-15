@@ -220,8 +220,55 @@ export interface UiStrings {
     viewTest: string;
     quizTitle: (n: number) => string;
     closeQuiz: string;
+    quizProgress: (curr: number, total: number) => string;
+    quizHintBtn: string;
+    quizHideHintBtn: string;
+    quizVerifyBtn: string;
+    quizNextBtn: string;
+    quizFinishBtn: string;
+    quizRestartBtn: string;
+    quizRegenerateBtn: string;
+    quizCorrectMsg: string;
+    quizIncorrectMsg: string;
+    quizScoreTitle: string;
+    quizScoreSummary: (correct: number, total: number) => string;
+    quizLangChangedPrompt: string;
     errorFallback: string;
     quizErrorFallback: string;
+    streamErrorFallback: string;
+    backLabel: string;
+    resizeHandleTitle: string;
+    clearChatTitle: string;
+    minimizeChatLabel: string;
+    sendLabel: string;
+  };
+  prompts: {
+    explainIgnitionMap: string;
+    explainFlowVsTemp: string;
+    explainOutcomes: string;
+    explainBurnTime: string;
+    explainNormalVsInverse: string;
+    explainTimeline: string;
+    explainCoolMatrix: string;
+    explainParam3d: string;
+    explainLunarTop10: string;
+    explainEarthAnalogies: string;
+    explainSim3dTest: (
+      id: string,
+      fuel: string,
+      flame: string,
+      o2Pct: number,
+      psi: string
+    ) => string;
+    askSim3dTest: (id: string) => string;
+    askDrawerTest: (
+      id: string,
+      fuel: string,
+      o2Pct: number,
+      psi: string
+    ) => string;
+    drawerContextLabel: (id: string) => string;
+    sim3dContextLabel: (id: string) => string;
   };
 }
 
@@ -449,8 +496,58 @@ const PT: UiStrings = {
     viewTest: 'Ver',
     quizTitle: (n) => `Modo Quiz Rápido (${n} questões)`,
     closeQuiz: 'Fechar quiz',
+    quizProgress: (curr, total) => `Questão ${curr} de ${total}`,
+    quizHintBtn: 'Ver dica',
+    quizHideHintBtn: 'Ocultar dica',
+    quizVerifyBtn: 'Verificar',
+    quizNextBtn: 'Próxima',
+    quizFinishBtn: 'Ver placar',
+    quizRestartBtn: 'Reiniciar',
+    quizRegenerateBtn: 'Gerar novo quiz',
+    quizCorrectMsg: 'Resposta correta!',
+    quizIncorrectMsg: 'Resposta incorreta.',
+    quizScoreTitle: 'Placar final',
+    quizScoreSummary: (correct, total) =>
+      `Você acertou ${correct} de ${total} questões.`,
+    quizLangChangedPrompt: 'Idioma alterado. Gerar novo quiz?',
     errorFallback: 'Não foi possível consultar o Mentor Fire Tamers.',
     quizErrorFallback: 'Falha ao gerar o quiz rápido.',
+    streamErrorFallback: 'Erro na transmissão da resposta.',
+    backLabel: 'Voltar',
+    resizeHandleTitle: 'Arraste para redimensionar largura',
+    clearChatTitle: 'Limpar conversa',
+    minimizeChatLabel: 'Minimizar chat',
+    sendLabel: 'Enviar',
+  },
+  prompts: {
+    explainIgnitionMap:
+      'Explique o Mapa de Ignição atual (pressão vs O₂) destacando a Zona Lunar (O₂ >= 30% e pressão <= 10,2 psi), o Ar da Terra e exemplos reais de Test ID.',
+    explainFlowVsTemp:
+      'Analise a relação entre fluxo de combustível (hc_flow_mg_s) e temperatura de pico no queimador (peak_burner_temp_c) nos ensaios filtrados, citando Test IDs.',
+    explainOutcomes:
+      'Explique a distribuição de desfechos (apagou sozinha, fluxo cortado, sem ignição, clarão, chama fria) entre etano, propano e butano (chamas normais vs inversas) nos dados filtrados.',
+    explainBurnTime:
+      'Explique a distribuição do tempo de queima (burn_time_s) entre etano, propano e butano nos ensaios filtrados e cite o ensaio mais longo.',
+    explainNormalVsInverse:
+      'Compare chamas normais vs chamas inversas nos ensaios filtrados (O₂ médio, pressão média, tempo de queima, temperatura de pico e taxa de ignição), citando exemplos reais de Test ID.',
+    explainTimeline:
+      'Analise a evolução ao longo dos 12 dias da campanha (day 1 a 12) nos dados filtrados: quais dias concentraram mais ensaios, maiores temperaturas médias ou chamas frias?',
+    explainCoolMatrix:
+      'Explique a Matriz de Chama Fria (códigos PCI-A até PCI-G e casos de cool_flame_only), em que gases, pressões e concentrações de O₂ elas apareceram e por que preocupam na segurança espacial.',
+    explainParam3d:
+      'Explique o que o Espaço de Parâmetros 3D (Pressão × O₂ × Pico Térmico/Fluxo/Queima) revela sobre onde ocorrem chamas frias, limites térmicos e ensaios na Zona Lunar.',
+    explainLunarTop10:
+      "Explique os 3 primeiros ensaios do ranking 'Mais relevantes para a Base Lunar' nos filtros atuais e por que eles representam risco em atmosferas lunares (O₂ >= 30%, P <= 10,2 psi).",
+    explainEarthAnalogies:
+      'Faça uma explicação didática com analogias na Terra (motor de carro, fogão e extintor) conectando chamas frias e o risco na Base Lunar.',
+    explainSim3dTest: (id, fuel, flame, o2Pct, psi) =>
+      `Explique em linguagem simples o comportamento da chama no ensaio ${id} (${fuel}, ${flame}, ${o2Pct}% O₂, ${psi} psi) comparado com uma chama na Terra (1g).`,
+    askSim3dTest: (id) =>
+      `Explique em detalhes o ensaio ${id}, por que ele teve esse desfecho e o que isso ensina sobre incêndios na ISS vs na Terra.`,
+    askDrawerTest: (id, fuel, o2Pct, psi) =>
+      `Explique o ensaio ${id} em detalhes simples: o que aconteceu com essa mistura de ${fuel} a ${o2Pct}% de O₂ e ${psi} psi, e qual a lição de segurança espacial?`,
+    drawerContextLabel: (id) => `Detalhe do ensaio ${id}`,
+    sim3dContextLabel: (id) => `Simulador 3D (${id})`,
   },
 };
 
@@ -678,8 +775,58 @@ const EN: UiStrings = {
     viewTest: 'Inspect',
     quizTitle: (n) => `Quick Quiz Mode (${n} questions)`,
     closeQuiz: 'Close quiz',
+    quizProgress: (curr, total) => `Question ${curr} of ${total}`,
+    quizHintBtn: 'Show hint',
+    quizHideHintBtn: 'Hide hint',
+    quizVerifyBtn: 'Check',
+    quizNextBtn: 'Next',
+    quizFinishBtn: 'See score',
+    quizRestartBtn: 'Restart',
+    quizRegenerateBtn: 'Generate new quiz',
+    quizCorrectMsg: 'Correct answer!',
+    quizIncorrectMsg: 'Incorrect answer.',
+    quizScoreTitle: 'Final score',
+    quizScoreSummary: (correct, total) =>
+      `You got ${correct} out of ${total} questions right.`,
+    quizLangChangedPrompt: 'Language changed. Generate new quiz?',
     errorFallback: 'Unable to reach the Fire Tamers Mentor.',
     quizErrorFallback: 'Failed to generate the quick quiz.',
+    streamErrorFallback: 'Streaming response error.',
+    backLabel: 'Back',
+    resizeHandleTitle: 'Drag to resize width',
+    clearChatTitle: 'Clear conversation',
+    minimizeChatLabel: 'Minimize chat',
+    sendLabel: 'Send',
+  },
+  prompts: {
+    explainIgnitionMap:
+      'Explain the current Ignition Map (pressure vs. O₂), highlighting the Lunar Zone (O₂ >= 30% and pressure <= 10.2 psi), Earth Air, and real Test ID examples.',
+    explainFlowVsTemp:
+      'Analyze the relationship between fuel flow (hc_flow_mg_s) and peak burner temperature (peak_burner_temp_c) in the filtered tests, citing real Test IDs.',
+    explainOutcomes:
+      'Explain the distribution of outcomes (self-extinguished, flow terminated, no ignition, flash only, cool flame only) across ethane, propane, and butane (normal vs. inverse flames) in the filtered data.',
+    explainBurnTime:
+      'Explain the burn duration (burn_time_s) distribution across ethane, propane, and butane in the filtered tests and cite the longest-burning test.',
+    explainNormalVsInverse:
+      'Compare normal flames vs. inverse flames in the filtered tests (mean O₂, mean pressure, burn time, peak temp, and ignition rate), citing real Test ID examples.',
+    explainTimeline:
+      'Analyze the progression over the 12 campaign days (days 1 to 12) in the filtered data: which days concentrated the most tests, highest mean temperatures, or cool flames?',
+    explainCoolMatrix:
+      'Explain the Cool Flame Matrix (codes PCI-A through PCI-G and cool_flame_only cases), which fuels, pressures, and O₂ concentrations produced them, and why they matter for spacecraft safety.',
+    explainParam3d:
+      'Explain what the 3D Parameter Space (Pressure × O₂ × Peak Temp/Flow/Burn Time) reveals about where cool flames, thermal limits, and Lunar Zone tests occur.',
+    explainLunarTop10:
+      "Explain the top 3 tests in the 'Lunar Base Relevance' ranking for the current filters and why they pose higher fire risk in lunar atmospheres (O₂ >= 30%, P <= 10.2 psi).",
+    explainEarthAnalogies:
+      'Give a clear explanation with everyday Earth analogies (car engine knock, kitchen stove, fire extinguisher) connecting cool flames to fire risk on a Lunar Base.',
+    explainSim3dTest: (id, fuel, flame, o2Pct, psi) =>
+      `Explain in simple terms the flame behavior in test ${id} (${fuel}, ${flame}, ${o2Pct}% O₂, ${psi} psi) compared with a flame on Earth (1g).`,
+    askSim3dTest: (id) =>
+      `Explain test ${id} in detail, why it had this outcome, and what it teaches us about fires on the ISS vs. on Earth.`,
+    askDrawerTest: (id, fuel, o2Pct, psi) =>
+      `Explain test ${id} in simple terms: what happened with this ${fuel} mixture at ${o2Pct}% O₂ and ${psi} psi, and what is the space safety takeaway?`,
+    drawerContextLabel: (id) => `Test detail ${id}`,
+    sim3dContextLabel: (id) => `3D Simulator (${id})`,
   },
 };
 
@@ -907,8 +1054,58 @@ const ES: UiStrings = {
     viewTest: 'Ver',
     quizTitle: (n) => `Modo Quiz Rápido (${n} preguntas)`,
     closeQuiz: 'Cerrar quiz',
+    quizProgress: (curr, total) => `Pregunta ${curr} de ${total}`,
+    quizHintBtn: 'Ver pista',
+    quizHideHintBtn: 'Ocultar pista',
+    quizVerifyBtn: 'Verificar',
+    quizNextBtn: 'Siguiente',
+    quizFinishBtn: 'Ver puntuación',
+    quizRestartBtn: 'Reiniciar',
+    quizRegenerateBtn: 'Generar nuevo quiz',
+    quizCorrectMsg: '¡Respuesta correcta!',
+    quizIncorrectMsg: 'Respuesta incorrecta.',
+    quizScoreTitle: 'Puntuación final',
+    quizScoreSummary: (correct, total) =>
+      `Acertaste ${correct} de ${total} preguntas.`,
+    quizLangChangedPrompt: 'Idioma cambiado. ¿Generar nuevo quiz?',
     errorFallback: 'No fue posible consultar al Mentor Fire Tamers.',
     quizErrorFallback: 'Error al generar el quiz rápido.',
+    streamErrorFallback: 'Error al transmitir la respuesta.',
+    backLabel: 'Volver',
+    resizeHandleTitle: 'Arrastra para cambiar el ancho',
+    clearChatTitle: 'Limpiar conversación',
+    minimizeChatLabel: 'Minimizar chat',
+    sendLabel: 'Enviar',
+  },
+  prompts: {
+    explainIgnitionMap:
+      'Explica el Mapa de Ignición actual (presión vs O₂) destacando la Zona Lunar (O₂ >= 30% y presión <= 10,2 psi), el Aire de la Tierra y ejemplos reales de Test ID.',
+    explainFlowVsTemp:
+      'Analiza la relación entre el flujo de combustible (hc_flow_mg_s) y la temperatura pico en el quemador (peak_burner_temp_c) en los ensayos filtrados, citando Test IDs reales.',
+    explainOutcomes:
+      'Explica la distribución de resultados (autoextinguida, flujo cortado, sin ignición, solo destello, solo llama fría) entre etano, propano y butano (llamas normales vs inversas) en los datos filtrados.',
+    explainBurnTime:
+      'Explica la distribución del tiempo de combustión (burn_time_s) entre etano, propano y butano en los ensayos filtrados y cita el ensayo de mayor duración.',
+    explainNormalVsInverse:
+      'Compara llamas normales vs llamas inversas en los ensayos filtrados (O₂ medio, presión media, duración, temperatura pico y tasa de ignición), citando ejemplos reales de Test ID.',
+    explainTimeline:
+      'Analiza la evolución a lo largo de los 12 días de campaña (días 1 a 12) en los datos filtrados: ¿qué días concentraron más ensayos, mayores temperaturas medias o llamas frías?',
+    explainCoolMatrix:
+      'Explica la Matriz de Llama Fría (códigos PCI-A a PCI-G y casos de cool_flame_only), en qué gases, presiones y concentraciones de O₂ aparecieron y por qué importan para la seguridad espacial.',
+    explainParam3d:
+      'Explica qué revela el Espacio de Parámetros 3D (Presión × O₂ × Pico Térmico/Flujo/Duración) sobre dónde ocurren llamas frías, límites térmicos y ensayos en la Zona Lunar.',
+    explainLunarTop10:
+      "Explica los 3 primeros ensayos del ranking 'Base Lunar' con los filtros actuales y por qué representan mayor riesgo en atmósferas lunares (O₂ >= 30%, P <= 10,2 psi).",
+    explainEarthAnalogies:
+      'Ofrece una explicación didáctica con analogías cotidianas en la Tierra (motor de auto, cocina y extintor) conectando las llamas frías con el riesgo en una Base Lunar.',
+    explainSim3dTest: (id, fuel, flame, o2Pct, psi) =>
+      `Explica con lenguaje sencillo el comportamiento de la llama en el ensayo ${id} (${fuel}, ${flame}, ${o2Pct}% O₂, ${psi} psi) comparado con una llama en la Tierra (1g).`,
+    askSim3dTest: (id) =>
+      `Explica en detalle el ensayo ${id}, por qué tuvo ese resultado y qué nos enseña sobre incendios en la ISS vs en la Tierra.`,
+    askDrawerTest: (id, fuel, o2Pct, psi) =>
+      `Explica el ensayo ${id} en términos sencillos: ¿qué pasó con esta mezcla de ${fuel} al ${o2Pct}% de O₂ y ${psi} psi, y cuál es la lección de seguridad espacial?`,
+    drawerContextLabel: (id) => `Detalle del ensayo ${id}`,
+    sim3dContextLabel: (id) => `Simulador 3D (${id})`,
   },
 };
 

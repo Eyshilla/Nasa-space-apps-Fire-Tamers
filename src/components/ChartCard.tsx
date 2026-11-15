@@ -84,7 +84,13 @@ export const ChartCard: React.FC<ChartCardProps> = ({
             {chartContextPrompt && (
               <button
                 type="button"
-                onClick={() => askAi(chartContextPrompt, chartContextLabel ?? title)}
+                onClick={() =>
+                  askAi(
+                    chartContextPrompt,
+                    chartContextLabel ?? title,
+                    'explain_chart'
+                  )
+                }
                 title={t.chartCard.explain}
                 className="inline-flex min-h-[28px] items-center gap-1 whitespace-nowrap rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] font-medium text-cyan-200 transition-colors hover:border-cyan-400/50 hover:bg-cyan-500/20 focus:outline-none focus:ring-1 focus:ring-cyan-400"
               >

@@ -147,10 +147,15 @@ export interface ChatMessage {
   streaming?: boolean;
 }
 
+export type ApiLanguageCode = 'pt-BR' | 'en' | 'es';
+
 export interface QuizQuestion {
   question: string;
   options: string[];
   correctIndex: number;
+  hint?: string;
   explanation: string;
+  correctFeedback?: string;
+  incorrectFeedback?: string;
   testIdRef: string;
 }

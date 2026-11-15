@@ -221,40 +221,157 @@ function extractCitedTestIds(text: string): string[] {
   return found;
 }
 
-function buildSystemInstruction(level: 'simples' | 'tecnico'): string {
+type ApiLanguageCode = 'pt-BR' | 'en' | 'es';
+
+function normalizeApiLanguage(raw?: string): ApiLanguageCode {
+  const val = (raw ?? '').trim().toLowerCase();
+  if (val === 'en' || val.startsWith('en-')) return 'en';
+  if (val === 'es' || val.startsWith('es-')) return 'es';
+  return 'pt-BR';
+}
+
+function getLanguageName(lang: ApiLanguageCode): string {
+  if (lang === 'en') return 'English';
+  if (lang === 'es') return 'Spanish';
+  return 'Portuguese (Brazil)';
+}
+
+function getLocalizedCsvVocabulary(lang: ApiLanguageCode): string {
+  if (lang === 'en') {
+    return `Localized vocabulary for CSV column values and labels (explain in English; keep technical symbols Zst, T_ad, TFP, Test ID, psi, bar, mg/s, °C, K as-is):
+- flame_type: "normal" -> Normal flame (fuel exits burner into O₂ chamber); "inverse" -> Inverse flame (O₂ exits burner into fuel-rich chamber)
+- fuel: "ethane" -> Ethane; "propane" -> Propane; "butane" -> Butane
+- outcome: "no_ignition" -> No ignition; "self_extinguished" -> Self-extinguished; "flow_terminated" -> Flow terminated; "flash_only" -> Flash only; "cool_flame_only" -> Cool flame only
+- o2_location / fuel_location: "chamber" -> Chamber; "burner_flow" -> Burner flow
+- quality_notes: "teste_abortado" -> Aborted test; "dados_perdidos" -> Missing data; "chama_nao_esferica" -> Non-spherical flame; "repeticao" -> Repeated test; "sem_nitrogenio" -> No nitrogen flow`;
+  }
+  if (lang === 'es') {
+    return `Vocabulario localizado para columnas y valores del CSV (explica en Español; mantén intactos los símbolos técnicos Zst, T_ad, TFP, Test ID, psi, bar, mg/s, °C, K):
+- flame_type: "normal" -> Llama normal (combustible sale del quemador hacia O₂); "inverse" -> Llama inversa (O₂ sale del quemador hacia atmósfera combustible)
+- fuel: "ethane" -> Etano; "propane" -> Propano; "butane" -> Butano
+- outcome: "no_ignition" -> Sin ignición; "self_extinguished" -> Autoextinguida; "flow_terminated" -> Flujo cortado; "flash_only" -> Solo destello; "cool_flame_only" -> Solo llama fría
+- o2_location / fuel_location: "chamber" -> Cámara; "burner_flow" -> Quemador
+- quality_notes: "teste_abortado" -> Ensayo abortado; "dados_perdidos" -> Datos perdidos; "chama_nao_esferica" -> Llama no esférica; "repeticao" -> Repetición de ensayo; "sem_nitrogenio" -> Sin flujo de nitrógeno`;
+  }
+  return `Vocabulário localizado para colunas e valores do CSV (explique em Português do Brasil; mantenha siglas técnicas Zst, T_ad, TFP, Test ID, psi, bar, mg/s, °C, K como estão):
+- flame_type: "normal" -> Chama normal; "inverse" -> Chama inversa
+- fuel: "ethane" -> Etano; "propane" -> Propano; "butane" -> Butano
+- outcome: "no_ignition" -> Sem ignição; "self_extinguished" -> Apagou sozinha; "flow_terminated" -> Fluxo cortado; "flash_only" -> Só clarão; "cool_flame_only" -> Só chama fria`;
+}
+
+function localizedServerError(
+  lang: ApiLanguageCode,
+  kind: 'missing_key' | 'empty_messages' | 'chat_failed' | 'quiz_failed' | 'quiz_lang_mismatch',
+  detail = ''
+): string {
+  if (lang === 'en') {
+    switch (kind) {
+      case 'missing_key':
+        return 'Gemini API key is not configured on the server (GEMINI_API_KEY). Check Settings > Secrets.';
+      case 'empty_messages':
+        return 'Please send at least one question.';
+      case 'chat_failed':
+        return `Failed to query Fire Tamers Mentor: ${detail}`;
+      case 'quiz_failed':
+        return `Failed to generate quiz: ${detail}`;
+      case 'quiz_lang_mismatch':
+        return `Generated quiz did not match the active language (${detail}). Please try again.`;
+    }
+  }
+  if (lang === 'es') {
+    switch (kind) {
+      case 'missing_key':
+        return 'La clave de la API Gemini no está configurada en el servidor (GEMINI_API_KEY). Revisa Settings > Secrets.';
+      case 'empty_messages':
+        return 'Envía al menos una pregunta.';
+      case 'chat_failed':
+        return `Error al consultar al Mentor Fire Tamers: ${detail}`;
+      case 'quiz_failed':
+        return `Error al generar el quiz: ${detail}`;
+      case 'quiz_lang_mismatch':
+        return `El quiz generado no coincidió con el idioma activo (${detail}). Inténtalo de nuevo.`;
+    }
+  }
+  switch (kind) {
+    case 'missing_key':
+      return 'Chave da API Gemini não configurada no servidor (GEMINI_API_KEY). Verifique Settings > Secrets.';
+    case 'empty_messages':
+      return 'Envie pelo menos uma pergunta.';
+    case 'chat_failed':
+      return `Falha ao consultar o Mentor Fire Tamers: ${detail}`;
+    case 'quiz_failed':
+      return `Erro ao gerar quiz: ${detail}`;
+    case 'quiz_lang_mismatch':
+      return `O quiz gerado não correspondeu ao idioma ativo (${detail}). Tente novamente.`;
+  }
+}
+
+function buildSystemInstruction(
+  level: 'simples' | 'tecnico',
+  lang: ApiLanguageCode = 'pt-BR',
+  mode: 'chat' | 'quiz' = 'chat'
+): string {
+  const languageName = getLanguageName(lang);
+
+  const topDirective =
+    mode === 'quiz'
+      ? `IMPORTANT LANGUAGE REQUIREMENT: Generate ALL quiz content (questions, answer options, explanations, hints and feedback) in ${languageName}. Do not use any other language, even if the dashboard data or field names are in Portuguese or English.`
+      : `IMPORTANT LANGUAGE REQUIREMENT: Generate ALL response content (explanations, summaries, analogies, hints and feedback) in ${languageName}. Do not use any other language, even if the dashboard data or field names are in Portuguese or English.`;
+
   const levelGuide =
     level === 'tecnico'
-      ? `Nível selecionado: EXPLICAR TÉCNICO. Mantenha frases objetivas e rigor científico para pesquisadores/estudantes avançados, detalhando parâmetros (Zst, T_ad, pressões em bar e psi, frações molares, fluxo mássico em mg/s), mas ainda definindo siglas na primeira menção e sem inventar nenhum dado fora da tabela.`
-      : `Nível selecionado: EXPLICAR SIMPLES. Você é o Mentor Fire Tamers, mentor de estudantes do ensino médio. Explique com analogias do dia a dia (fogão de casa, isqueiro, batida de pino no motor do carro, extintor de incêndio), frases curtas e sem jargão; defina cada termo técnico na primeira vez (chama fria, Zst, T_ad, TFP, microgravidade).`;
+      ? `Selected level: TECHNICAL. Keep sentences objective with scientific rigor for researchers/advanced students, detailing parameters (Zst, T_ad, pressure in bar and psi, mole fractions, mass flow in mg/s), defining acronyms on first mention in ${languageName}, and never inventing data outside the dataset.`
+      : `Selected level: SIMPLE. You are the Fire Tamers Mentor for high-school students and curious learners. Explain using everyday analogies (kitchen stove, lighter, car engine knock, fire extinguisher), short jargon-free sentences, and define every technical term on first mention in ${languageName} (cool flame, Zst, T_ad, TFP, microgravity).`;
 
-  return `Você é o Mentor Fire Tamers (em inglês: Fire Tamers Mentor), tutor educacional do dashboard analítico Fire Tamers sobre o experimento PSI-159 (Cool Flames Investigation with Gases, projeto ACME / CFI-G).
+  const localizedRules =
+    lang === 'en'
+      ? `Mandatory rules:
+1. Answer ONLY using real data from psi159_unificado.csv, dicionario_dados.csv, the panel context sent in the request, and basic combustion/space-safety science.
+2. Never invent numbers. If the data does not cover the question (e.g., partial gravity on Moon 1/6 g or Mars 3/8 g, or the exact acronym meaning of TFP and PCI marked "to be confirmed" in the dictionary), state clearly that it is unknown / not present in PSI-159 (which covers ISS microgravity only).
+3. Keep technical terms (Zst, T_ad, TFP, Test ID, psi) as-is, and explain them in English. Whenever citing pressure, peak temperature, burn time, flammability limits, or Lunar Zone tests (O2 >= 30% and pressure <= 10.2 psi), cite exact values and the corresponding Test ID (e.g., \`21242 A1\`, \`21174 C6\`).
+4. For chat answers longer than 3 lines, end with a concise "**1-line summary:** ...".
+5. Respond exclusively in English using light Markdown.`
+      : lang === 'es'
+        ? `Reglas obligatorias:
+1. Responde ÚNICAMENTE con base en los datos reales de psi159_unificado.csv, dicionario_dados.csv, el contexto enviado en la solicitud y ciencia básica de combustión/seguridad espacial.
+2. Nunca inventes números. Si los datos no cubren la pregunta (por ejemplo, gravedad parcial de la Luna 1/6 g o Marte 3/8 g, o el significado exacto de TFP y PCI marcados como "por confirmar" en el diccionario), dilo claramente indicando que no consta en PSI-159 (que cubre solo microgravedad en la ISS).
+3. Mantén los términos técnicos (Zst, T_ad, TFP, Test ID, psi) tal como están y explícalos en Español. Siempre que menciones presión, temperatura pico, duración, límites de inflamabilidad o Zona Lunar (O2 >= 30% y presión <= 10,2 psi), cita valores exactos y el código Test ID (ej.: \`21242 A1\`, \`21174 C6\`).
+4. Para respuestas de chat de más de 3 líneas, termina con "**Resumen en 1 línea:** ...".
+5. Responde exclusivamente en Español con Markdown ligero.`
+        : `Regras obrigatórias:
+1. Responda SOMENTE com base nos dados reais do arquivo psi159_unificado.csv, no dicionario_dados.csv, no contexto do painel enviado na conversa e no conhecimento científico básico de combustão/segurança espacial.
+2. Nunca invente números. Se os dados não cobrirem a pergunta (por exemplo, gravidade parcial da Lua/Marte, ou o significado de TFP e PCI que constam como "a confirmar" no dicionário), diga claramente "não sei" ou que essa informação não consta nos dados do PSI-159 (que cobre apenas microgravidade na ISS).
+3. Mantenha termos técnicos (Zst, T_ad, TFP, Test ID, psi) como estão, explicando-os em Português do Brasil. Sempre que falar de pressão, temperatura de pico, tempo de queima, limites de inflamabilidade ou ensaios da Zona Lunar (O2 >= 30% e pressão <= 10,2 psi), cite os valores exatos e o código 'Test ID' correspondente (ex.: \`21242 A1\`, \`21174 C6\`).
+4. Termine respostas de chat com mais de 3 linhas com um "**Resumo em 1 linha:** ..." direto ao ponto.
+5. Responda exclusivamente em Português do Brasil com Markdown leve.`;
 
-Identidade e transparência obrigatória:
-- O projeto Fire Tamers é um projeto independente criado para o desafio NASA e NÃO é um projeto oficial da NASA.
-- Você utiliza exclusivamente dados públicos do experimento NASA PSI-159 (NASA Physical Science Informatics). Sempre que o usuário perguntar sobre sua origem, autoria ou vínculo institucional, deixe claro que você usa dados públicos do experimento NASA PSI-159 e que este projeto não é oficial da NASA.
+  return `${topDirective}
+
+You are the Fire Tamers Mentor (Mentor Fire Tamers), educational tutor for the Fire Tamers analytical dashboard on the PSI-159 experiment (Cool Flames Investigation with Gases, ACME / CFI-G).
+
+Identity & Transparency:
+- Fire Tamers is an independent project created for the NASA challenge and is NOT an official NASA project.
+- You use public data from the NASA PSI-159 experiment (NASA Physical Science Informatics). Whenever asked about your origin or affiliation, make it clear that you use public NASA PSI-159 experiment data and that this project is not official NASA.
 
 ${levelGuide}
 
-Regras obrigatórias:
-1. Responda SOMENTE com base nos dados reais do arquivo psi159_unificado.csv, no dicionario_dados.csv, no contexto do painel enviado na conversa e no conhecimento científico básico de combustão/segurança espacial.
-2. Nunca invente números. Se os dados não cobrirem a pergunta (por exemplo, gravidade parcial da Lua/Marte, ou o significado de TFP e PCI que constam como "a confirmar" no dicionário), diga claramente "não sei" ou que essa informação não consta nos dados do PSI-159 (que cobre apenas microgravidade na ISS).
-3. Sempre que falar de pressão, temperatura de pico, tempo de queima, limites de inflamabilidade ou ensaios da Zona Lunar (O2 >= 30% e pressão <= 10,2 psi), cite os valores exatos e o código 'Test ID' correspondente (ex.: \`21242 A1\`, \`21174 C6\`).
-4. Termine respostas com mais de 3 linhas com um "**Resumo em 1 linha:** ..." direto ao ponto.
-5. Responda por padrão em Português do Brasil com Markdown leve (ou no idioma solicitado no início da mensagem, como inglês ou espanhol).
+${localizedRules}
 
-=== RESUMO VERIFICADO DO DATASET (333 ENSAIOS) ===
-- Total de ensaios: ${dataset.summary.totalTests} (${dataset.summary.normalCount} normais, ${dataset.summary.inverseCount} inversas)
-- Ignições confirmadas: ${dataset.summary.ignitedCount}
-- Chamas frias confirmadas (cool_flame=True): ${dataset.summary.coolFlameCount} (inclui ${dataset.summary.coolFlameOnlyCount} casos de cool_flame_only)
-- Atingiram limite térmico do queimador: ${dataset.summary.tempLimitCount}
-- Maior temperatura de pico no queimador: ${dataset.summary.maxPeakTempC} °C (${dataset.summary.maxPeakTempK} K) no Test ID ${dataset.summary.maxPeakTempTestId}
-- Maior duração de queima: ${dataset.summary.longestBurnS} s no Test ID ${dataset.summary.longestBurnTestId}
-- Faixa de pressão: ${dataset.summary.minPressurePsi} a ${dataset.summary.maxPressurePsi} psi (${dataset.summary.minPressureBar} a ${dataset.summary.maxPressureBar} bar)
+${getLocalizedCsvVocabulary(lang)}
 
-=== DICIONÁRIO DE DADOS (dicionario_dados.csv) ===
+=== VERIFIED DATASET SUMMARY (${dataset.summary.totalTests} TESTS) ===
+- Total tests: ${dataset.summary.totalTests} (${dataset.summary.normalCount} normal, ${dataset.summary.inverseCount} inverse)
+- Confirmed ignitions: ${dataset.summary.ignitedCount}
+- Confirmed cool flames (cool_flame=True): ${dataset.summary.coolFlameCount} (includes ${dataset.summary.coolFlameOnlyCount} cool_flame_only cases)
+- Hit burner thermal limit: ${dataset.summary.tempLimitCount}
+- Max peak burner temp: ${dataset.summary.maxPeakTempC} °C (${dataset.summary.maxPeakTempK} K) in Test ID ${dataset.summary.maxPeakTempTestId}
+- Longest burn duration: ${dataset.summary.longestBurnS} s in Test ID ${dataset.summary.longestBurnTestId}
+- Pressure range: ${dataset.summary.minPressurePsi} to ${dataset.summary.maxPressurePsi} psi (${dataset.summary.minPressureBar} to ${dataset.summary.maxPressureBar} bar)
+
+=== DATA DICTIONARY (dicionario_dados.csv — translate field explanations into ${languageName}, keep technical symbols Zst, T_ad, TFP, Test ID, psi) ===
 ${rawDictionaryCsv}
 
-=== DADOS EXPERIMENTAIS COMPLETOS (psi159_unificado.csv) ===
+=== EXPERIMENTAL DATASET (psi159_unificado.csv) ===
 ${rawDataCsv}`;
 }
 
@@ -267,31 +384,36 @@ async function startServer() {
   });
 
   app.post('/api/assistant/chat', async (req, res) => {
+    const body = (req.body ?? {}) as {
+      lang?: string;
+      interactionKind?: 'chat' | 'explain_chart' | 'analyze_test' | 'chip';
+      messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
+      selectedTestId?: string;
+      level?: 'simples' | 'tecnico';
+      dashboardContext?: {
+        activeTab?: string;
+        filtersSummary?: string;
+        kpisSummary?: string;
+        chartContext?: string;
+      };
+    };
+    const targetLang = normalizeApiLanguage(body.lang);
+    const languageName = getLanguageName(targetLang);
+
     try {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
         res.status(500).json({
-          error:
-            'Chave da API Gemini não configurada no servidor (GEMINI_API_KEY). Verifique Settings > Secrets.',
+          error: localizedServerError(targetLang, 'missing_key'),
         });
         return;
       }
 
-      const body = req.body as {
-        messages?: Array<{ role: 'user' | 'assistant'; content: string }>;
-        selectedTestId?: string;
-        level?: 'simples' | 'tecnico';
-        dashboardContext?: {
-          activeTab?: string;
-          filtersSummary?: string;
-          kpisSummary?: string;
-          chartContext?: string;
-        };
-      };
-
       const messages = Array.isArray(body?.messages) ? body.messages : [];
       if (messages.length === 0) {
-        res.status(400).json({ error: 'Envie pelo menos uma pergunta.' });
+        res.status(400).json({
+          error: localizedServerError(targetLang, 'empty_messages'),
+        });
         return;
       }
 
@@ -310,21 +432,25 @@ async function startServer() {
       });
 
       const contextLines: string[] = [];
+      contextLines.push(`Active output language: ${languageName} (${targetLang})`);
+      if (body.interactionKind) {
+        contextLines.push(`Interaction mode: ${body.interactionKind}`);
+      }
       if (body.dashboardContext?.activeTab) {
-        contextLines.push(`Aba atual: ${body.dashboardContext.activeTab}`);
+        contextLines.push(`Active tab: ${body.dashboardContext.activeTab}`);
       }
       if (body.dashboardContext?.filtersSummary) {
-        contextLines.push(`Filtros globais ativos: ${body.dashboardContext.filtersSummary}`);
+        contextLines.push(`Active filters: ${body.dashboardContext.filtersSummary}`);
       }
       if (body.dashboardContext?.kpisSummary) {
-        contextLines.push(`KPIs calculados dos ensaios filtrados: ${body.dashboardContext.kpisSummary}`);
+        contextLines.push(`Filtered KPIs: ${body.dashboardContext.kpisSummary}`);
       }
       if (body.dashboardContext?.chartContext) {
-        contextLines.push(`Gráfico em análise: ${body.dashboardContext.chartContext}`);
+        contextLines.push(`Target item/chart: ${body.dashboardContext.chartContext}`);
       }
       if (selectedTest) {
         contextLines.push(
-          `Ensaio selecionado no detalhe: ${JSON.stringify(selectedTest)}`
+          `Selected test detail: ${JSON.stringify(selectedTest)}`
         );
       }
 
@@ -332,7 +458,7 @@ async function startServer() {
         const isLastUser = index === messages.length - 1 && m.role === 'user';
         let text = m.content;
         if (isLastUser && contextLines.length > 0) {
-          text = `[CONTEXTO ATUAL DO PAINEL]\n${contextLines.join('\n')}\n\n[PERGUNTA DO USUÁRIO]\n${m.content}`;
+          text = `[DASHBOARD CONTEXT]\n${contextLines.join('\n')}\n\n[USER REQUEST — Respond strictly in ${languageName}]\n${m.content}`;
         }
         return {
           role: m.role === 'assistant' ? 'model' : 'user',
@@ -348,7 +474,7 @@ async function startServer() {
         model: 'gemini-4-hydrogen',
         contents,
         config: {
-          systemInstruction: buildSystemInstruction(level),
+          systemInstruction: buildSystemInstruction(level, targetLang, 'chat'),
           thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
         },
       });
@@ -372,7 +498,7 @@ async function startServer() {
       console.error('Erro no streaming /api/assistant/chat:', message);
       if (!res.headersSent) {
         res.status(500).json({
-          error: `Falha ao consultar o Mentor Fire Tamers: ${message}`,
+          error: localizedServerError(targetLang, 'chat_failed', message),
         });
       } else {
         res.write(
@@ -384,18 +510,23 @@ async function startServer() {
   });
 
   app.post('/api/assistant/quiz', async (req, res) => {
+    const body = (req.body ?? {}) as {
+      lang?: string;
+      filtersSummary?: string;
+      kpisSummary?: string;
+      sampleTests?: Psi159Test[];
+    };
+    const targetLang = normalizeApiLanguage(body.lang);
+    const languageName = getLanguageName(targetLang);
+
     try {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
-        res.status(500).json({ error: 'GEMINI_API_KEY não configurada.' });
+        res.status(500).json({
+          error: localizedServerError(targetLang, 'missing_key'),
+        });
         return;
       }
-
-      const body = req.body as {
-        filtersSummary?: string;
-        kpisSummary?: string;
-        sampleTests?: Psi159Test[];
-      };
 
       const ai = new GoogleGenAI({
         apiKey,
@@ -404,19 +535,27 @@ async function startServer() {
 
       const sampleSnippet = JSON.stringify((body.sampleTests ?? []).slice(0, 25));
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: `Crie um quiz rápido educativo com exatamente 3 perguntas de múltipla escolha em Português do Brasil para estudantes do ensino médio sobre o experimento PSI-159, usando EXCLUSIVAMENTE estes dados filtrados e exemplos reais:
-Filtros: ${body.filtersSummary ?? 'Todos os 333 ensaios'}
-KPIs atuais: ${body.kpisSummary ?? ''}
-Amostra dos ensaios filtrados: ${sampleSnippet}
+      const basePrompt = `Generate an educational quick quiz with exactly 3 multiple-choice questions strictly in ${languageName} (language code "${targetLang}") for students exploring the PSI-159 experiment, using ONLY the filtered data and real examples below:
+Target output language: ${languageName} ("${targetLang}")
+Active filters: ${body.filtersSummary ?? 'All 333 tests'}
+Current KPIs: ${body.kpisSummary ?? ''}
+Sample of filtered tests: ${sampleSnippet}
 
-Cada pergunta deve citar um Test ID real da amostra ou da tabela quando envolver números, ter 4 alternativas curtas, índice da resposta correta (0 a 3) e uma explicação didática curta com analogia terrestre.`,
-        config: {
-          systemInstruction: buildSystemInstruction('simples'),
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-          responseMimeType: 'application/json',
-          responseSchema: {
+Requirements:
+- Set the top-level JSON field "language" to "${targetLang}".
+- Write ALL questions, 4 answer options, hints, correctFeedback, incorrectFeedback, and short Earth-analogy explanations strictly in ${languageName}.
+- Keep technical terms (Zst, T_ad, TFP, Test ID, psi) as-is, and explain them in ${languageName}.
+- Translate any CSV column labels or categorical values (like fuel or outcome) into ${languageName}.
+- Each question must cite a real Test ID from the sample or dataset whenever numbers are involved, with correctIndex from 0 to 3.`;
+
+      const quizResponseSchema = {
+        type: Type.OBJECT,
+        properties: {
+          language: {
+            type: Type.STRING,
+            description: `Must be exactly "${targetLang}"`,
+          },
+          questions: {
             type: Type.ARRAY,
             items: {
               type: Type.OBJECT,
@@ -427,27 +566,90 @@ Cada pergunta deve citar um Test ID real da amostra ou da tabela quando envolver
                   items: { type: Type.STRING },
                 },
                 correctIndex: { type: Type.INTEGER },
+                hint: { type: Type.STRING },
                 explanation: { type: Type.STRING },
+                correctFeedback: { type: Type.STRING },
+                incorrectFeedback: { type: Type.STRING },
                 testIdRef: { type: Type.STRING },
               },
               required: [
                 'question',
                 'options',
                 'correctIndex',
+                'hint',
                 'explanation',
+                'correctFeedback',
+                'incorrectFeedback',
                 'testIdRef',
               ],
             },
           },
         },
-      });
+        required: ['language', 'questions'],
+      };
 
-      const raw = (response.text ?? '[]').trim();
-      const questions = JSON.parse(raw);
-      res.json({ questions });
+      const generateQuizOnce = async (extraReminder = '') => {
+        const response = await ai.models.generateContent({
+          model: 'gemini-4-hydrogen',
+          contents: `${basePrompt}${extraReminder}`,
+          config: {
+            systemInstruction: buildSystemInstruction('simples', targetLang, 'quiz'),
+            thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+            responseMimeType: 'application/json',
+            responseSchema: quizResponseSchema,
+          },
+        });
+        const raw = (response.text ?? '{}').trim();
+        return JSON.parse(raw) as {
+          language?: string;
+          questions?: Array<{
+            question: string;
+            options: string[];
+            correctIndex: number;
+            hint?: string;
+            explanation: string;
+            correctFeedback?: string;
+            incorrectFeedback?: string;
+            testIdRef: string;
+          }>;
+        };
+      };
+
+      let parsed = await generateQuizOnce();
+      let returnedLang = (parsed.language ?? '').trim();
+
+      if (
+        returnedLang !== targetLang ||
+        !Array.isArray(parsed.questions) ||
+        parsed.questions.length === 0
+      ) {
+        parsed = await generateQuizOnce(
+          `\n\nCRITICAL CORRECTION: Previous output had language="${returnedLang || 'missing'}". You MUST set "language" to "${targetLang}" and write EVERY single word of questions, options, hints, feedback, and explanations in ${languageName}.`
+        );
+        returnedLang = (parsed.language ?? '').trim();
+      }
+
+      if (
+        returnedLang !== targetLang ||
+        !Array.isArray(parsed.questions) ||
+        parsed.questions.length === 0
+      ) {
+        res.status(502).json({
+          error: localizedServerError(
+            targetLang,
+            'quiz_lang_mismatch',
+            `${returnedLang || 'unknown'} != ${targetLang}`
+          ),
+        });
+        return;
+      }
+
+      res.json({ language: returnedLang, questions: parsed.questions });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      res.status(500).json({ error: `Erro ao gerar quiz: ${message}` });
+      res.status(500).json({
+        error: localizedServerError(targetLang, 'quiz_failed', message),
+      });
     }
   });
 

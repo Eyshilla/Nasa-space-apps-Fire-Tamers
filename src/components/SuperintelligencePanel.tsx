@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
+  Award,
   Bot,
   Check,
   CheckCircle2,
   Copy,
   HelpCircle,
+  Lightbulb,
+  RefreshCw,
   Send,
   Sparkles,
   Trash2,
@@ -16,11 +19,28 @@ import {
   DEFAULT_O2_RANGE,
   DEFAULT_PSI_RANGE,
   usePsiStore,
+  type AiInteractionKind,
 } from '../store/usePsiStore';
-import type { ChatMessage, QuizQuestion } from '../types/psi159';
+import type {
+  ApiLanguageCode,
+  AppLanguage,
+  ChatMessage,
+  QuizQuestion,
+} from '../types/psi159';
 import { applyGlobalFilters, computeKpis } from '../utils/analytics';
-import { formatNumber, fuelLabel } from '../utils/formatters';
+import {
+  flameTypeLabel,
+  formatNumber,
+  fuelLabel,
+  outcomeLabel,
+} from '../utils/formatters';
 import { useStrings } from '../utils/i18n';
+
+function toApiLanguage(lang: AppLanguage): ApiLanguageCode {
+  if (lang === 'en') return 'en';
+  if (lang === 'es') return 'es';
+  return 'pt-BR';
+}
 
 function renderInlineFormatting(
   line: string,
@@ -159,8 +179,16 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
 
   const [quizLoading, setQuizLoading] = useState(false);
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[] | null>(null);
-  const [quizAnswers, setQuizAnswers] = useState<Record<number, number>>({});
+  const [quizLang, setQuizLang] = useState<AppLanguage | null>(null);
+  const [quizCurrentIdx, setQuizCurrentIdx] = useState(0);
+  const [quizSelectedOption, setQuizSelectedOption] = useState<
+    Record<number, number>
+  >({});
+  const [quizVerified, setQuizVerified] = useState<Record<number, boolean>>({});
+  const [quizShowHint, setQuizShowHint] = useState<Record<number, boolean>>({});
+  const [quizFinished, setQuizFinished] = useState(false);
   const [quizError, setQuizError] = useState<string | null>(null);
+  const [quizLangChangedNotice, setQuizLangChangedNotice] = useState(false);
   const [fabRetracted, setFabRetracted] = useState(false);
 
   useEffect(() => {
@@ -183,6 +211,8 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
   const resizingRef = useRef<{ startX: number; startW: number } | null>(null);
   const scrollEndRef = useRef<HTMLDivElement | null>(null);
   const lastExternalIdRef = useRef<number>(0);
+  const quizCacheRef = useRef<Map<string, QuizQuestion[]>>(new Map());
+  const quizRequestIdRef = useRef<number>(0);
 
   const filteredTests = useMemo(
     () => applyGlobalFilters(tests, filters),
@@ -192,10 +222,21 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
 
   const filtersSummary = useMemo(() => {
     const parts: string[] = [];
-    if (filters.fuels.length)
-      parts.push(`Gases: ${filters.fuels.map((f) => fuelLabel(f, lang)).join(', ')}`);
-    if (filters.flameTypes.length)
-      parts.push(`Chamas: ${filters.flameTypes.join(', ')}`);
+    if (filters.fuels.length) {
+      const label = lang === 'en' ? 'Fuels' : lang === 'es' ? 'Gases' : 'Gases';
+      parts.push(
+        `${label}: ${filters.fuels.map((f) => fuelLabel(f, lang)).join(', ')}`
+      );
+    }
+    if (filters.flameTypes.length) {
+      const label =
+        lang === 'en' ? 'Flames' : lang === 'es' ? 'Llamas' : 'Chamas';
+      parts.push(
+        `${label}: ${filters.flameTypes
+          .map((ft) => flameTypeLabel(ft, lang))
+          .join(', ')}`
+      );
+    }
     if (
       filters.o2Range[0] > DEFAULT_O2_RANGE[0] ||
       filters.o2Range[1] < DEFAULT_O2_RANGE[1]
@@ -208,24 +249,75 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
       filters.psiRange[0] > DEFAULT_PSI_RANGE[0] ||
       filters.psiRange[1] < DEFAULT_PSI_RANGE[1]
     ) {
+      const label =
+        lang === 'en' ? 'Pressure' : lang === 'es' ? 'Presión' : 'Pressão';
       parts.push(
-        `Pressão: ${formatNumber(filters.psiRange[0], 1, lang)}–${formatNumber(filters.psiRange[1], 1, lang)} psi`
+        `${label}: ${formatNumber(filters.psiRange[0], 1, lang)}–${formatNumber(filters.psiRange[1], 1, lang)} psi`
       );
     }
-    if (filters.outcomes.length)
-      parts.push(`Desfechos: ${filters.outcomes.join(', ')}`);
-    if (filters.onlyCoolFlames) parts.push('Somente chamas frias');
-    if (filters.crossFilter)
-      parts.push(`Seleção cruzada: ${filters.crossFilter.label}`);
-    return parts.length > 0 ? parts.join(' | ') : 'Todos os 333 ensaios';
-  }, [filters, lang]);
+    if (filters.outcomes.length) {
+      const label =
+        lang === 'en'
+          ? 'Outcomes'
+          : lang === 'es'
+            ? 'Resultados'
+            : 'Desfechos';
+      parts.push(
+        `${label}: ${filters.outcomes
+          .map((o) => outcomeLabel(o, lang))
+          .join(', ')}`
+      );
+    }
+    if (filters.onlyCoolFlames) {
+      parts.push(tStr.filters.onlyCoolFlames);
+    }
+    if (filters.crossFilter) {
+      const label =
+        lang === 'en'
+          ? 'Cross-filter'
+          : lang === 'es'
+            ? 'Filtro cruzado'
+            : 'Seleção cruzada';
+      parts.push(`${label}: ${filters.crossFilter.label}`);
+    }
+    if (parts.length > 0) return parts.join(' | ');
+    return lang === 'en'
+      ? 'All 333 tests'
+      : lang === 'es'
+        ? 'Todos los 333 ensayos'
+        : 'Todos os 333 ensaios';
+  }, [filters, lang, tStr.filters.onlyCoolFlames]);
 
   const kpisSummary = useMemo(() => {
-    return `${kpis.total} ensaios filtrados; ${formatNumber(kpis.ignitedPct, 1, lang)}% ignição; ${kpis.coolFlameCount} chamas frias; pico máx ${kpis.maxPeakTempC !== null ? `${formatNumber(kpis.maxPeakTempC, 1, lang)} °C (${kpis.maxPeakTempTestId})` : 'N/A'}; queima média ${formatNumber(kpis.avgBurnTimeS, 1, lang)} s; ${kpis.lunarZoneCount} na Zona Lunar.`;
+    const peakPart =
+      kpis.maxPeakTempC !== null
+        ? `${formatNumber(kpis.maxPeakTempC, 1, lang)} °C (${kpis.maxPeakTempTestId})`
+        : 'N/A';
+    if (lang === 'en') {
+      return `${kpis.total} filtered tests; ${formatNumber(kpis.ignitedPct, 1, lang)}% ignition; ${kpis.coolFlameCount} cool flames; max peak ${peakPart}; avg burn ${formatNumber(kpis.avgBurnTimeS, 1, lang)} s; ${kpis.lunarZoneCount} in Lunar Zone.`;
+    }
+    if (lang === 'es') {
+      return `${kpis.total} ensayos filtrados; ${formatNumber(kpis.ignitedPct, 1, lang)}% ignición; ${kpis.coolFlameCount} llamas frías; pico máx ${peakPart}; duración media ${formatNumber(kpis.avgBurnTimeS, 1, lang)} s; ${kpis.lunarZoneCount} en Zona Lunar.`;
+    }
+    return `${kpis.total} ensaios filtrados; ${formatNumber(kpis.ignitedPct, 1, lang)}% ignição; ${kpis.coolFlameCount} chamas frias; pico máx ${peakPart}; queima média ${formatNumber(kpis.avgBurnTimeS, 1, lang)} s; ${kpis.lunarZoneCount} na Zona Lunar.`;
   }, [kpis, lang]);
 
   const dynamicSuggestions = useMemo(() => {
     if (lang === 'en') {
+      if (activeTab === 'cool_flames') {
+        return [
+          'Why are cool flames hard to detect inside a spacecraft?',
+          'Compare test 21174 C6 and test 21291 C1 in simple terms.',
+          'How would Earth gravity (1 g) change the flame in test 21242 A1?',
+        ];
+      }
+      if (activeTab === 'ignition') {
+        return [
+          'Which 3 tests are most critical inside the Lunar Zone?',
+          'Why do O₂ ≥ 30% and pressure ≤ 10.2 psi increase fire risk?',
+          'What was the highest burner temperature in the active filters?',
+        ];
+      }
       return [
         'What are cool flames using a car engine or stove analogy?',
         'Which test burned longest and which reached the highest burner temp?',
@@ -233,6 +325,20 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
       ];
     }
     if (lang === 'es') {
+      if (activeTab === 'cool_flames') {
+        return [
+          '¿Por qué las llamas frías son difíciles de detectar en una nave?',
+          'Compara el ensayo 21174 C6 y el 21291 C1 en lenguaje sencillo.',
+          '¿Cómo cambiaría la gravedad terrestre (1 g) la llama del ensayo 21242 A1?',
+        ];
+      }
+      if (activeTab === 'ignition') {
+        return [
+          '¿Cuáles son los 3 ensayos más críticos dentro de la Zona Lunar?',
+          '¿Por qué O₂ ≥ 30% y presión ≤ 10,2 psi aumentan el riesgo?',
+          '¿Cuál fue la mayor temperatura medida en los filtros actuales?',
+        ];
+      }
       return [
         '¿Qué son las llamas frías usando una analogía de motor o cocina?',
         '¿Qué ensayo duró más y cuál alcanzó la mayor temperatura?',
@@ -262,7 +368,7 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
 
   useEffect(() => {
     scrollEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, quizQuestions, chatOpen]);
+  }, [messages, quizQuestions, quizCurrentIdx, quizFinished, chatOpen]);
 
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
@@ -282,12 +388,18 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
   }, [onWidthChange]);
 
   const sendMessage = useCallback(
-    async (promptText: string, chartContext?: string) => {
+    async (
+      promptText: string,
+      chartContext?: string,
+      interactionKind: AiInteractionKind = 'chat'
+    ) => {
       const clean = promptText.trim();
       if (!clean || streaming) return;
 
       setQuizQuestions(null);
       setQuizError(null);
+      setQuizFinished(false);
+      setQuizLangChangedNotice(false);
 
       const userMsg: ChatMessage = {
         id: `u-${Date.now()}`,
@@ -309,23 +421,14 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
       setStreaming(true);
 
       try {
-        const langInstruction =
-          lang === 'en'
-            ? '[Answer in English] '
-            : lang === 'es'
-              ? '[Responde en Español] '
-              : '';
-        const payloadMessages = historyForApi.map((m, idx) =>
-          idx === historyForApi.length - 1 && m.role === 'user'
-            ? { ...m, content: `${langInstruction}${m.content}` }
-            : m
-        );
-
+        const apiLang = toApiLanguage(lang);
         const res = await fetch('/api/assistant/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            messages: payloadMessages,
+            lang: apiLang,
+            interactionKind,
+            messages: historyForApi,
             selectedTestId,
             level,
             dashboardContext: {
@@ -386,15 +489,13 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
                 )
               );
             } else if (payload.type === 'error') {
-              throw new Error(payload.error || 'Erro no stream');
+              throw new Error(payload.error || tStr.ai.streamErrorFallback);
             }
           }
         }
       } catch (err: unknown) {
         const msg =
-          err instanceof Error
-            ? err.message
-            : tStr.ai.errorFallback;
+          err instanceof Error ? err.message : tStr.ai.errorFallback;
         setMessages((prev) =>
           prev.map((m) =>
             m.id === assistantId
@@ -416,47 +517,118 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
       kpisSummary,
       lang,
       tStr.ai.errorFallback,
+      tStr.ai.streamErrorFallback,
     ]
   );
 
-  const startQuiz = useCallback(async () => {
-    if (quizLoading || streaming) return;
-    setQuizLoading(true);
-    setQuizError(null);
-    setQuizAnswers({});
-    setQuizQuestions(null);
+  const startQuiz = useCallback(
+    async (forceRefresh = false) => {
+      if (streaming) return;
+      const apiLang = toApiLanguage(lang);
+      const cacheKey = `${apiLang}::${filtersSummary}`;
 
-    try {
-      const res = await fetch('/api/assistant/quiz', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filtersSummary,
-          kpisSummary,
-          sampleTests: filteredTests.slice(0, 25),
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error || `HTTP ${res.status}`);
+      setQuizError(null);
+      setQuizSelectedOption({});
+      setQuizVerified({});
+      setQuizShowHint({});
+      setQuizCurrentIdx(0);
+      setQuizFinished(false);
+
+      if (!forceRefresh) {
+        const cached = quizCacheRef.current.get(cacheKey);
+        if (cached && cached.length > 0) {
+          setQuizLang(lang);
+          setQuizQuestions(cached);
+          setQuizLoading(false);
+          return;
+        }
       }
-      const data = (await res.json()) as { questions: QuizQuestion[] };
-      setQuizQuestions(data.questions);
-    } catch (err: unknown) {
-      setQuizError(
-        err instanceof Error ? err.message : tStr.ai.quizErrorFallback
-      );
-    } finally {
-      setQuizLoading(false);
+
+      const requestId = ++quizRequestIdRef.current;
+      setQuizLang(lang);
+      setQuizLoading(true);
+      setQuizQuestions(null);
+
+      try {
+        const res = await fetch('/api/assistant/quiz', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            lang: apiLang,
+            filtersSummary,
+            kpisSummary,
+            sampleTests: filteredTests.slice(0, 25),
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(
+            (err as { error?: string }).error || `HTTP ${res.status}`
+          );
+        }
+        const data = (await res.json()) as {
+          language?: string;
+          questions: QuizQuestion[];
+        };
+        if (quizRequestIdRef.current !== requestId) return;
+        if (
+          data.language !== apiLang ||
+          !Array.isArray(data.questions) ||
+          data.questions.length === 0
+        ) {
+          throw new Error(tStr.ai.quizErrorFallback);
+        }
+        quizCacheRef.current.set(cacheKey, data.questions);
+        setQuizLang(lang);
+        setQuizQuestions(data.questions);
+      } catch (err: unknown) {
+        if (quizRequestIdRef.current !== requestId) return;
+        setQuizError(
+          err instanceof Error ? err.message : tStr.ai.quizErrorFallback
+        );
+      } finally {
+        if (quizRequestIdRef.current === requestId) {
+          setQuizLoading(false);
+        }
+      }
+    },
+    [
+      streaming,
+      lang,
+      filtersSummary,
+      kpisSummary,
+      filteredTests,
+      tStr.ai.quizErrorFallback,
+    ]
+  );
+
+  const restartCurrentQuiz = useCallback(() => {
+    setQuizSelectedOption({});
+    setQuizVerified({});
+    setQuizShowHint({});
+    setQuizCurrentIdx(0);
+    setQuizFinished(false);
+  }, []);
+
+  // When switching language while a quiz is active, clear old questions, show notice, and regenerate in new language
+  useEffect(() => {
+    const hasQuizOpen =
+      quizQuestions !== null ||
+      quizLoading ||
+      quizFinished ||
+      quizError !== null;
+    if (hasQuizOpen && quizLang && quizLang !== lang) {
+      setQuizQuestions(null);
+      setQuizSelectedOption({});
+      setQuizVerified({});
+      setQuizShowHint({});
+      setQuizCurrentIdx(0);
+      setQuizFinished(false);
+      setQuizError(null);
+      setQuizLangChangedNotice(true);
+      void startQuiz(true);
     }
-  }, [
-    quizLoading,
-    streaming,
-    filtersSummary,
-    kpisSummary,
-    filteredTests,
-    tStr.ai.quizErrorFallback,
-  ]);
+  }, [lang, quizLang, quizQuestions, quizLoading, quizFinished, quizError, startQuiz]);
 
   useEffect(() => {
     if (
@@ -465,9 +637,14 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
     ) {
       lastExternalIdRef.current = aiExternalPrompt.id;
       if (aiExternalPrompt.mode === 'quiz') {
-        startQuiz();
+        setQuizLangChangedNotice(false);
+        void startQuiz(false);
       } else {
-        sendMessage(aiExternalPrompt.text, aiExternalPrompt.chartContext);
+        void sendMessage(
+          aiExternalPrompt.text,
+          aiExternalPrompt.chartContext,
+          aiExternalPrompt.kind ?? 'explain_chart'
+        );
       }
     }
   }, [aiExternalPrompt, sendMessage, startQuiz]);
@@ -478,7 +655,7 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
     setTimeout(() => setCopiedId(null), 1500);
   };
 
-  const backLabel = lang === 'en' ? 'Back' : lang === 'es' ? 'Volver' : 'Voltar';
+  const backLabel = tStr.ai.backLabel;
 
   return (
     <>
@@ -556,7 +733,7 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
                 e.preventDefault();
                 resizingRef.current = { startX: e.clientX, startW: panelWidth };
               }}
-              title="Arraste para redimensionar largura"
+              title={tStr.ai.resizeHandleTitle}
               className="absolute inset-y-0 left-0 z-10 hidden w-1.5 cursor-ew-resize hover:bg-cyan-400/50 lg:block"
             />
 
@@ -591,7 +768,7 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
                   <button
                     type="button"
                     onClick={() => setMessages([])}
-                    title="Limpar conversa"
+                    title={tStr.ai.clearChatTitle}
                     className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
@@ -600,7 +777,7 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
                 <button
                   type="button"
                   onClick={() => setChatOpen(false)}
-                  aria-label="Minimizar chat"
+                  aria-label={tStr.ai.minimizeChatLabel}
                   className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
                 >
                   <X className="h-4 w-4" />
@@ -639,7 +816,10 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
 
               <button
                 type="button"
-                onClick={startQuiz}
+                onClick={() => {
+                  setQuizLangChangedNotice(false);
+                  void startQuiz(false);
+                }}
                 disabled={quizLoading || streaming}
                 className="inline-flex min-h-[24px] items-center gap-1 whitespace-nowrap rounded border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-200 transition-colors hover:bg-emerald-500/25 disabled:opacity-50"
               >
@@ -649,7 +829,10 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
             </div>
 
             <div className="flex-1 space-y-3 overflow-y-auto p-3">
-              {messages.length === 0 && !quizQuestions && !quizLoading && (
+              {messages.length === 0 &&
+                !quizQuestions &&
+                !quizLoading &&
+                !quizLangChangedNotice && (
                 <div className="space-y-3">
                   <div className="wrap-anywhere rounded-lg border border-slate-800 bg-[#121A30] p-3 text-xs text-slate-300">
                     {tStr.ai.welcome(kpis.total)}
@@ -663,7 +846,7 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
                       <button
                         key={sug}
                         type="button"
-                        onClick={() => sendMessage(sug)}
+                        onClick={() => void sendMessage(sug, undefined, 'chip')}
                         className="flex w-full items-center gap-2 rounded-lg border border-slate-800 bg-[#121A30]/70 px-3 py-2 text-left text-[11px] text-slate-200 transition-colors hover:border-cyan-500/40 hover:bg-cyan-500/10"
                       >
                         <Sparkles className="h-3 w-3 shrink-0 text-cyan-400" />
@@ -738,6 +921,29 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
                 </div>
               ))}
 
+              {quizLangChangedNotice && (
+                <div
+                  role="status"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100"
+                >
+                  <span className="wrap-anywhere font-medium">
+                    {tStr.ai.quizLangChangedPrompt}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={quizLoading}
+                    onClick={() => {
+                      setQuizLangChangedNotice(false);
+                      void startQuiz(true);
+                    }}
+                    className="inline-flex items-center gap-1 whitespace-nowrap rounded border border-cyan-400/50 bg-cyan-500/20 px-2 py-0.5 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-500/30 disabled:opacity-50"
+                  >
+                    <RefreshCw className="h-3 w-3 shrink-0" />
+                    <span>{tStr.ai.quizRegenerateBtn}</span>
+                  </button>
+                </div>
+              )}
+
               {quizLoading && (
                 <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200">
                   {tStr.ai.quizLoading}
@@ -750,89 +956,278 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
                 </div>
               )}
 
-              {quizQuestions && (
+              {quizQuestions && quizQuestions.length > 0 && (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-emerald-300">
-                      {tStr.ai.quizTitle(quizQuestions.length)}
-                    </span>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-emerald-300">
+                        {tStr.ai.quizTitle(quizQuestions.length)}
+                      </span>
+                      {!quizFinished && (
+                        <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 font-mono text-[10px] text-emerald-200">
+                          {tStr.ai.quizProgress(
+                            quizCurrentIdx + 1,
+                            quizQuestions.length
+                          )}
+                        </span>
+                      )}
+                    </div>
                     <button
                       type="button"
-                      onClick={() => setQuizQuestions(null)}
+                      onClick={() => {
+                        setQuizQuestions(null);
+                        setQuizLangChangedNotice(false);
+                        setQuizFinished(false);
+                      }}
                       className="text-[11px] text-slate-400 hover:text-slate-200"
                     >
                       {tStr.ai.closeQuiz}
                     </button>
                   </div>
-                  {quizQuestions.map((q, qIdx) => {
-                    const chosen = quizAnswers[qIdx];
-                    const answered = chosen !== undefined;
-                    return (
-                      <div
-                        key={qIdx}
-                        className="rounded-xl border border-slate-800 bg-[#121A30] p-3 text-xs"
-                      >
-                        <p className="wrap-anywhere font-semibold text-slate-100">
-                          {qIdx + 1}. {q.question}
-                        </p>
-                        <div className="mt-2 space-y-1.5">
-                          {q.options.map((opt, optIdx) => {
-                            const isCorrect = optIdx === q.correctIndex;
-                            const isChosen = chosen === optIdx;
-                            let style =
-                              'border-slate-700 bg-[#0B1020] text-slate-200 hover:border-cyan-500/40';
-                            if (answered) {
-                              if (isCorrect) {
-                                style =
-                                  'border-emerald-500/60 bg-emerald-500/15 text-emerald-200';
-                              } else if (isChosen) {
-                                style =
-                                  'border-red-500/60 bg-red-500/15 text-red-200';
-                              } else {
-                                style = 'border-slate-800 bg-[#0B1020] text-slate-500';
-                              }
-                            }
-                            return (
+
+                  {quizFinished ? (
+                    (() => {
+                      const correctCount = quizQuestions.reduce(
+                        (acc, item, idx) =>
+                          quizVerified[idx] &&
+                          quizSelectedOption[idx] === item.correctIndex
+                            ? acc + 1
+                            : acc,
+                        0
+                      );
+                      return (
+                        <div className="space-y-3 rounded-xl border border-emerald-500/40 bg-[#121A30] p-4 text-center">
+                          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300">
+                            <Award className="h-5 w-5" />
+                          </div>
+                          <div className="text-xs font-bold uppercase tracking-wider text-emerald-300">
+                            {tStr.ai.quizScoreTitle}
+                          </div>
+                          <div className="font-mono text-2xl font-bold tabular-nums text-slate-100">
+                            {correctCount} / {quizQuestions.length}
+                          </div>
+                          <p className="wrap-anywhere text-xs text-slate-300">
+                            {tStr.ai.quizScoreSummary(
+                              correctCount,
+                              quizQuestions.length
+                            )}
+                          </p>
+                          <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={restartCurrentQuiz}
+                              className="inline-flex min-h-[30px] items-center gap-1.5 rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-3 py-1.5 text-xs font-semibold text-cyan-200 hover:bg-cyan-500/25"
+                            >
+                              <RefreshCw className="h-3.5 w-3.5 shrink-0" />
+                              <span>{tStr.ai.quizRestartBtn}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setQuizLangChangedNotice(false);
+                                void startQuiz(true);
+                              }}
+                              className="inline-flex min-h-[30px] items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/25"
+                            >
+                              <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                              <span>{tStr.ai.quizRegenerateBtn}</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    (() => {
+                      const q = quizQuestions[quizCurrentIdx];
+                      if (!q) return null;
+                      const chosen = quizSelectedOption[quizCurrentIdx];
+                      const verified = Boolean(quizVerified[quizCurrentIdx]);
+                      const isAnswerCorrect =
+                        verified && chosen === q.correctIndex;
+                      const hintOpen = Boolean(quizShowHint[quizCurrentIdx]);
+                      const isLastQuestion =
+                        quizCurrentIdx >= quizQuestions.length - 1;
+
+                      return (
+                        <div className="rounded-xl border border-slate-800 bg-[#121A30] p-3 text-xs">
+                          <p className="wrap-anywhere font-semibold text-slate-100">
+                            {quizCurrentIdx + 1}. {q.question}
+                          </p>
+
+                          {q.hint && (
+                            <div className="mt-2">
                               <button
-                                key={optIdx}
                                 type="button"
-                                disabled={answered}
                                 onClick={() =>
-                                  setQuizAnswers((prev) => ({
+                                  setQuizShowHint((prev) => ({
                                     ...prev,
-                                    [qIdx]: optIdx,
+                                    [quizCurrentIdx]: !hintOpen,
                                   }))
                                 }
-                                className={`flex w-full items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-[11px] transition-colors ${style}`}
+                                className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-300 hover:text-amber-200"
                               >
-                                <span className="wrap-anywhere">{opt}</span>
-                                {answered && isCorrect && (
-                                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-                                )}
-                                {answered && isChosen && !isCorrect && (
-                                  <XCircle className="h-3.5 w-3.5 shrink-0 text-red-400" />
-                                )}
+                                <Lightbulb className="h-3 w-3 shrink-0" />
+                                <span>
+                                  {hintOpen
+                                    ? tStr.ai.quizHideHintBtn
+                                    : tStr.ai.quizHintBtn}
+                                </span>
                               </button>
-                            );
-                          })}
-                        </div>
-                        {answered && (
-                          <div className="wrap-anywhere mt-2 rounded-lg border border-slate-800 bg-[#0B1020] p-2 text-[11px] text-slate-300">
-                            <p>{q.explanation}</p>
-                            {q.testIdRef && (
+                              {hintOpen && (
+                                <p className="wrap-anywhere mt-1 rounded border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] text-amber-100">
+                                  {q.hint}
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="mt-2.5 space-y-1.5">
+                            {q.options.map((opt, optIdx) => {
+                              const isCorrectOpt = optIdx === q.correctIndex;
+                              const isChosen = chosen === optIdx;
+                              let style = isChosen
+                                ? 'border-cyan-400/70 bg-cyan-500/15 text-cyan-100'
+                                : 'border-slate-700 bg-[#0B1020] text-slate-200 hover:border-cyan-500/40';
+                              if (verified) {
+                                if (isCorrectOpt) {
+                                  style =
+                                    'border-emerald-500/60 bg-emerald-500/15 text-emerald-200';
+                                } else if (isChosen) {
+                                  style =
+                                    'border-red-500/60 bg-red-500/15 text-red-200';
+                                } else {
+                                  style =
+                                    'border-slate-800 bg-[#0B1020] text-slate-500';
+                                }
+                              }
+                              return (
+                                <button
+                                  key={optIdx}
+                                  type="button"
+                                  disabled={verified}
+                                  onClick={() =>
+                                    setQuizSelectedOption((prev) => ({
+                                      ...prev,
+                                      [quizCurrentIdx]: optIdx,
+                                    }))
+                                  }
+                                  className={`flex w-full items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-left text-[11px] transition-colors ${style}`}
+                                >
+                                  <span className="wrap-anywhere">{opt}</span>
+                                  {verified && isCorrectOpt && (
+                                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+                                  )}
+                                  {verified && isChosen && !isCorrectOpt && (
+                                    <XCircle className="h-3.5 w-3.5 shrink-0 text-red-400" />
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {!verified ? (
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                               <button
                                 type="button"
-                                onClick={() => selectTest(q.testIdRef, true)}
-                                className="mt-1 font-mono text-[10px] text-cyan-300 underline"
+                                disabled={chosen === undefined}
+                                onClick={() =>
+                                  setQuizVerified((prev) => ({
+                                    ...prev,
+                                    [quizCurrentIdx]: true,
+                                  }))
+                                }
+                                className="inline-flex min-h-[28px] items-center gap-1 rounded-lg bg-cyan-500 px-3 py-1 text-[11px] font-semibold text-slate-950 transition-colors hover:bg-cyan-400 disabled:opacity-40"
                               >
-                                {tStr.ai.viewTest}: {q.testIdRef}
+                                <Check className="h-3.5 w-3.5 shrink-0" />
+                                <span>{tStr.ai.quizVerifyBtn}</span>
                               </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                              <button
+                                type="button"
+                                onClick={restartCurrentQuiz}
+                                className="inline-flex min-h-[28px] items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/70 px-2.5 py-1 text-[11px] text-slate-300 hover:text-slate-100"
+                              >
+                                <RefreshCw className="h-3 w-3 shrink-0" />
+                                <span>{tStr.ai.quizRestartBtn}</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="mt-3 space-y-2">
+                              <div
+                                className={`rounded-lg border p-2 text-[11px] ${
+                                  isAnswerCorrect
+                                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+                                    : 'border-red-500/40 bg-red-500/10 text-red-200'
+                                }`}
+                              >
+                                <div className="flex items-center gap-1.5 font-semibold">
+                                  {isAnswerCorrect ? (
+                                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                                  ) : (
+                                    <XCircle className="h-3.5 w-3.5 shrink-0" />
+                                  )}
+                                  <span>
+                                    {isAnswerCorrect
+                                      ? tStr.ai.quizCorrectMsg
+                                      : tStr.ai.quizIncorrectMsg}
+                                  </span>
+                                </div>
+                                {(isAnswerCorrect
+                                  ? q.correctFeedback
+                                  : q.incorrectFeedback) && (
+                                  <p className="wrap-anywhere mt-1 text-slate-200">
+                                    {isAnswerCorrect
+                                      ? q.correctFeedback
+                                      : q.incorrectFeedback}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="wrap-anywhere rounded-lg border border-slate-800 bg-[#0B1020] p-2 text-[11px] text-slate-300">
+                                <p>{q.explanation}</p>
+                                {q.testIdRef && (
+                                  <button
+                                    type="button"
+                                    onClick={() => selectTest(q.testIdRef, true)}
+                                    className="mt-1 font-mono text-[10px] text-cyan-300 underline"
+                                  >
+                                    {tStr.ai.viewTest}: {q.testIdRef}
+                                  </button>
+                                )}
+                              </div>
+
+                              <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                                <button
+                                  type="button"
+                                  onClick={restartCurrentQuiz}
+                                  className="inline-flex min-h-[28px] items-center gap-1 rounded-lg border border-slate-700 bg-slate-800/70 px-2.5 py-1 text-[11px] text-slate-300 hover:text-slate-100"
+                                >
+                                  <RefreshCw className="h-3 w-3 shrink-0" />
+                                  <span>{tStr.ai.quizRestartBtn}</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (isLastQuestion) {
+                                      setQuizFinished(true);
+                                    } else {
+                                      setQuizCurrentIdx((idx) => idx + 1);
+                                    }
+                                  }}
+                                  className="inline-flex min-h-[28px] items-center gap-1 rounded-lg bg-emerald-500 px-3 py-1 text-[11px] font-semibold text-slate-950 transition-colors hover:bg-emerald-400"
+                                >
+                                  <span>
+                                    {isLastQuestion
+                                      ? tStr.ai.quizFinishBtn
+                                      : tStr.ai.quizNextBtn}
+                                  </span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()
+                  )}
                 </div>
               )}
 
@@ -842,7 +1237,7 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                sendMessage(input);
+                void sendMessage(input, undefined, 'chat');
               }}
               style={{
                 paddingBottom: 'max(0.625rem, env(safe-area-inset-bottom))',
@@ -861,7 +1256,7 @@ export const SuperintelligencePanel: React.FC<SuperintelligencePanelProps> = ({
                 <button
                   type="submit"
                   disabled={streaming || !input.trim()}
-                  aria-label="Send"
+                  aria-label={tStr.ai.sendLabel}
                   className="flex min-h-[34px] min-w-[34px] shrink-0 items-center justify-center rounded-lg bg-cyan-500 text-slate-950 transition-colors hover:bg-cyan-400 disabled:opacity-40"
                 >
                   <Send className="h-3.5 w-3.5" />

@@ -45,7 +45,7 @@ export const LunarTop10Card: React.FC<LunarTop10CardProps> = ({
       subtitle={tStr.top10.subtitle}
       helpTitle={tStr.top10.howWeCalc}
       helpBody="Zona Lunar (até 40 pts: O₂ ≥ 30% e P ≤ 10,2 psi) + Chama Fria (+25 pts) + Pico Térmico (até 20 pts) + Tempo de Queima (até 15 pts)."
-      chartContextPrompt="Explique os 3 primeiros ensaios do ranking 'Mais relevantes para a Base Lunar' nos filtros atuais e por que eles representam risco em atmosferas lunares (O₂ >= 30%, P <= 10,2 psi)."
+      chartContextPrompt={tStr.prompts.explainLunarTop10}
       chartContextLabel={tStr.top10.title}
       isEmpty={top10.length === 0}
       loading={loading}
@@ -203,8 +203,9 @@ export const InsightsSection: React.FC<InsightsSectionProps> = ({ tests }) => {
               type="button"
               onClick={() =>
                 askAi(
-                  'Faça uma explicação didática com analogias na Terra (motor de carro, fogão e extintor) conectando chamas frias e o risco na Base Lunar.',
-                  tStr.insights.earthTitle
+                  tStr.prompts.explainEarthAnalogies,
+                  tStr.insights.earthTitle,
+                  'explain_chart'
                 )
               }
               className="inline-flex min-h-[26px] items-center gap-1 whitespace-nowrap rounded border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[11px] text-cyan-300 hover:bg-cyan-500/20"

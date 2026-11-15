@@ -23,11 +23,18 @@ export const DEFAULT_FILTERS: GlobalFilters = {
   crossFilter: null,
 };
 
+export type AiInteractionKind =
+  | 'chat'
+  | 'explain_chart'
+  | 'analyze_test'
+  | 'chip';
+
 interface AiExternalPrompt {
   id: number;
   text: string;
   chartContext?: string;
   mode?: 'chat' | 'quiz';
+  kind?: AiInteractionKind;
 }
 
 interface PsiState {
@@ -67,7 +74,11 @@ interface PsiState {
   setFilterSheetOpen: (open: boolean) => void;
   setPresentationMode: (enabled: boolean) => void;
   togglePresentationMode: () => void;
-  askAi: (text: string, chartContext?: string) => void;
+  askAi: (
+    text: string,
+    chartContext?: string,
+    kind?: AiInteractionKind
+  ) => void;
   triggerQuiz: () => void;
 }
 
@@ -105,12 +116,16 @@ export const usePsiStore = create<PsiState>((set, get) => ({
           : (data.tests[0]?.test_id ?? ''),
       });
     } catch (err: unknown) {
+      const currentLang = get().lang;
+      const fallbackMsg =
+        currentLang === 'en'
+          ? 'Failed to load PSI-159 experimental data.'
+          : currentLang === 'es'
+            ? 'Error al cargar los datos experimentales PSI-159.'
+            : 'Falha ao carregar os dados experimentais PSI-159.';
       set({
         loading: false,
-        error:
-          err instanceof Error
-            ? err.message
-            : 'Falha ao carregar os dados experimentais PSI-159.',
+        error: err instanceof Error ? err.message : fallbackMsg,
       });
     }
   },
@@ -222,7 +237,7 @@ export const usePsiStore = create<PsiState>((set, get) => ({
       };
     }),
 
-  askAi: (text, chartContext) => {
+  askAi: (text, chartContext, kind = 'explain_chart') => {
     const narrowDesktop =
       typeof window !== 'undefined' && window.innerWidth < 1520;
     set((s) => ({
@@ -233,6 +248,7 @@ export const usePsiStore = create<PsiState>((set, get) => ({
         text,
         chartContext,
         mode: 'chat',
+        kind,
       },
     }));
   },

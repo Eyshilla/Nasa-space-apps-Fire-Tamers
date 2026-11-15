@@ -49,6 +49,7 @@ export function fuelColorHex(fuel: string): string {
 
 export function flameTypeLabel(type: string, lang: AppLanguage = 'pt'): string {
   if (lang === 'en') return type === 'inverse' ? 'Inverse' : 'Normal';
+  if (lang === 'es') return type === 'inverse' ? 'Inversa' : 'Normal';
   return type === 'inverse' ? 'Inversa' : 'Normal';
 }
 
@@ -264,15 +265,35 @@ export function flameColorLabel(
   }
 }
 
-export function qualityNotesLabel(notes: string | null): string | null {
+export function qualityNotesLabel(
+  notes: string | null,
+  lang: AppLanguage = 'pt'
+): string | null {
   if (!notes) return null;
-  const map: Record<string, string> = {
-    teste_abortado: 'Teste abortado',
-    dados_perdidos: 'Dados perdidos',
-    chama_nao_esferica: 'Chama não esférica',
-    repeticao: 'Repetição de ensaio',
-    sem_nitrogenio: 'Sem fluxo de nitrogênio',
-  };
+  const map: Record<string, string> =
+    lang === 'en'
+      ? {
+          teste_abortado: 'Aborted test',
+          dados_perdidos: 'Missing data',
+          chama_nao_esferica: 'Non-spherical flame',
+          repeticao: 'Repeated test',
+          sem_nitrogenio: 'No nitrogen flow',
+        }
+      : lang === 'es'
+        ? {
+            teste_abortado: 'Ensayo abortado',
+            dados_perdidos: 'Datos perdidos',
+            chama_nao_esferica: 'Llama no esférica',
+            repeticao: 'Repetición de ensayo',
+            sem_nitrogenio: 'Sin flujo de nitrógeno',
+          }
+        : {
+            teste_abortado: 'Teste abortado',
+            dados_perdidos: 'Dados perdidos',
+            chama_nao_esferica: 'Chama não esférica',
+            repeticao: 'Repetição de ensaio',
+            sem_nitrogenio: 'Sem fluxo de nitrogênio',
+          };
   return notes
     .split(';')
     .map((n) => map[n.trim()] ?? n.trim())

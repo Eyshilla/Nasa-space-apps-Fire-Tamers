@@ -314,7 +314,13 @@ export const ChamberSimulator3D: React.FC<ChamberSimulator3DProps> = ({
       helpBody={tStr.sim3d.microgCaption}
       chartContextPrompt={
         activeTest
-          ? `Explique em linguagem simples o comportamento da chama no ensaio ${activeTest.test_id} (${fuelLabel(activeTest.fuel, lang)}, ${flameTypeLabel(activeTest.flame_type, lang)}, ${Math.round(activeTest.o2_fraction * 100)}% O2, ${formatNumber(activeTest.pressure_psi, 2, lang)} psi) comparado com uma chama na Terra (1g).`
+          ? tStr.prompts.explainSim3dTest(
+              activeTest.test_id,
+              fuelLabel(activeTest.fuel, lang),
+              flameTypeLabel(activeTest.flame_type, lang),
+              Math.round(activeTest.o2_fraction * 100),
+              formatNumber(activeTest.pressure_psi, 2, lang)
+            )
           : undefined
       }
       chartContextLabel={tStr.sim3d.title}
@@ -469,8 +475,9 @@ export const ChamberSimulator3D: React.FC<ChamberSimulator3DProps> = ({
                   type="button"
                   onClick={() =>
                     askAi(
-                      `Explique em detalhes o ensaio ${activeTest.test_id}, por que ele teve esse desfecho e o que isso ensina sobre incêndios na ISS vs na Terra.`,
-                      `Simulador 3D (${activeTest.test_id})`
+                      tStr.prompts.askSim3dTest(activeTest.test_id),
+                      tStr.prompts.sim3dContextLabel(activeTest.test_id),
+                      'analyze_test'
                     )
                   }
                   className="inline-flex items-center gap-1 whitespace-nowrap font-medium text-cyan-300 hover:text-cyan-200"

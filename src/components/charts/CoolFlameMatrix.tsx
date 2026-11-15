@@ -98,7 +98,7 @@ export const CoolFlameMatrix: React.FC<CoolFlameMatrixProps> = ({
       subtitle={`${totalCool} ${tStr.coolMatrix.occurrences}`}
       helpTitle={tStr.coolMatrix.title}
       helpBody={tStr.kpis.coolBody}
-      chartContextPrompt="Explique a Matriz de Chama Fria (códigos PCI-A até PCI-G e casos de cool_flame_only), em que gases, pressões e concentrações de O₂ elas apareceram e por que preocupam na segurança espacial."
+      chartContextPrompt={tStr.prompts.explainCoolMatrix}
       chartContextLabel={tStr.coolMatrix.title}
       footer={<span>{tStr.coolMatrix.hintClick}</span>}
       isEmpty={tests.length === 0}

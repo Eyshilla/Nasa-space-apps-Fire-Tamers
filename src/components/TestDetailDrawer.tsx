@@ -57,7 +57,7 @@ export const TestDetailDrawer: React.FC = () => {
 
   const meta = outcomeMeta(test.outcome, lang);
   const lunar = isInLunarZone(test);
-  const qualityText = qualityNotesLabel(test.quality_notes);
+  const qualityText = qualityNotesLabel(test.quality_notes, lang);
 
   const paramRow = (
     label: string,
@@ -168,8 +168,14 @@ export const TestDetailDrawer: React.FC = () => {
               type="button"
               onClick={() => {
                 askAi(
-                  `Explique o ensaio ${test.test_id} em detalhes simples: o que aconteceu com essa mistura de ${fuelLabel(test.fuel, lang)} a ${Math.round(test.o2_fraction * 100)}% de O₂ e ${formatNumber(test.pressure_psi, 2, lang)} psi, e qual a lição de segurança espacial?`,
-                  `Detalhe do ensaio ${test.test_id}`
+                  tStr.prompts.askDrawerTest(
+                    test.test_id,
+                    fuelLabel(test.fuel, lang),
+                    Math.round(test.o2_fraction * 100),
+                    formatNumber(test.pressure_psi, 2, lang)
+                  ),
+                  tStr.prompts.drawerContextLabel(test.test_id),
+                  'analyze_test'
                 );
               }}
               className="inline-flex min-h-[34px] items-center justify-center gap-1.5 rounded-lg border border-cyan-500/40 bg-cyan-500/15 px-3 py-2 text-center text-xs font-semibold text-cyan-200 transition-colors hover:bg-cyan-500/25"

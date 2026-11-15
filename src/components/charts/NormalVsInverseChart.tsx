@@ -123,7 +123,7 @@ export const NormalVsInverseChart: React.FC<NormalVsInverseChartProps> = ({
       subtitle={tStr.radarChart.subtitle}
       helpTitle={tStr.radarChart.title}
       helpBody="Na chama normal, o gás combustível sai do queimador para uma câmara com O₂. Na chama inversa, o O₂ sai do queimador para uma atmosfera rica em combustível."
-      chartContextPrompt="Compare chamas normais vs chamas inversas nos ensaios filtrados (O₂ médio, pressão média, tempo de queima, temperatura de pico e taxa de ignição), citando exemplos reais de Test ID."
+      chartContextPrompt={tStr.prompts.explainNormalVsInverse}
       chartContextLabel={tStr.radarChart.title}
       legend={legendItems}
       plotAutoHeight
